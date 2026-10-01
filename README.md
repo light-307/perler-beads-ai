@@ -1,5 +1,17 @@
 # 拼豆底稿生成器 (Perler Beads Generator)
 
+## 本地改动记录（此 fork）
+
+相对上游的已做改动：
+
+1. **横轴切割数量默认值**：上传/裁剪确认图片后（`src/app/page.tsx` `handleCropConfirm`）横轴格子数默认值由 60 改为 50。
+2. **处理模式默认值**：像素化模式默认由"卡通模式"（`Dominant`）改为"真实模式"（`Average`）（`src/app/page.tsx`）。
+3. **默认色板**：MARD 色板管理中心默认不再选中 **P、Q、R、T、Y、ZG** 系列（291 个色号中默认选中 221 个；仅在无本地保存记录时生效）。
+
+---
+
+> **以下为 fork 自 [liangdabiao/perler-beads-ai](https://github.com/liangdabiao/perler-beads-ai) 的原始内容**
+
 因为市面上的拼豆软件差强人意 ，所以我基于开源项目：https://github.com/Zippland/perler-beads ， 我加上AI优化了项目，AI辅助优化图片功能，写了一个专门生成拼豆图纸的网站。 经过大量测试，我觉得已经可以达到 一键生成拼豆图纸了！
 
 特别感谢佬友支持： [linux.do](https://linux.do/t/topic/1660924/)
