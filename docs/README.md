@@ -6,10 +6,10 @@
 
 | 文档 | 适用场景 |
 |------|----------|
-| [自建服务器部署](部署/自建服务器部署.md) | 部署到自己的服务器（Nginx / Node.js / Docker），当前 `main` 分支 |
-| [静态部署（no-backend 分支）](部署/静态部署-no-backend分支.md) | 仅适用于 `no-backend` 分支的纯静态部署 |
+| [Cloudflare Pages 部署指南](部署/Cloudflare部署指南.md) | **推荐**：静态导出 + Pages Function，含从零注册、环境变量、Preview Deployment、自定义域名 |
+| [自建服务器部署](部署/自建服务器部署.md) | 部署到自己的服务器（Nginx / Node.js / Docker） |
 
-> Cloudflare Pages 的部署步骤写在根目录 [README](../README.md#部署到-cloudflare-pages推荐) 中，因为那是当前 `main` 分支的推荐方式。
+> 早期还有一个 `no-backend` 分支（浏览器直连火山引擎的纯静态方案），已废弃并从仓库移除；如需查阅历史内容可用 tag `archive/no-backend`。
 
 ## 功能
 

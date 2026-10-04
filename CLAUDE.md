@@ -47,7 +47,7 @@ npm run pages:deploy # 部署到 Cloudflare Pages（需先 build）
 - 前端始终调用同源接口：`src/utils/aiOptimize.ts` 中 `fetch('/api/ai-optimize')`。
 - 该路径由 `functions/api/ai-optimize.ts` 在 Cloudflare Pages 上实现，调用火山引擎即梦（`req_key: jimeng_t2i_v40`，`CVSync2AsyncSubmitTask` / `CVSync2AsyncGetResult`，HMAC-SHA256 签名，轮询最长约 3 分钟），需要环境变量 `VOLC_ACCESS_KEY_ID` / `VOLC_SECRET_ACCESS_KEY`。
 - **已知现象**：`output: "export"` 下 `npm run dev` 没有 Pages Function，AI 优化会 404，这是预期行为；本地联调请用 `npm run pages:dev`。
-- `no-backend` 分支走的是另一套实现：浏览器用 Web Crypto 直接调用火山引擎（其客户端文件 `src/lib/volcEngineClient.ts` 不属于本分支，已从本分支移除）。
+- 早期存在一个 `no-backend` 分支（浏览器用 Web Crypto 直接调用火山引擎），**已废弃**：分支已从仓库移除，归档在 tag `archive/no-backend`，其客户端文件 `src/lib/volcEngineClient.ts` 也已删除。
 
 ## 注意事项
 
@@ -59,8 +59,8 @@ npm run pages:deploy # 部署到 Cloudflare Pages（需先 build）
 
 仓库文档集中在 `docs/`，文件名以中文为主：
 
+- `docs/部署/Cloudflare部署指南.md` — 推荐部署方式，含从零注册与 Preview Deployment
 - `docs/部署/自建服务器部署.md` — 非 Cloudflare 环境部署
-- `docs/部署/静态部署-no-backend分支.md` — 仅适用于 `no-backend` 分支
 - `docs/功能/一键去背景.md` — 一键去背景功能实现
 - `docs/参考/即梦4.0接口文档.md` — 火山引擎即梦接口原始文档
 - `docs/规划/双端云保存待办.md` — 云端保存待办方案
