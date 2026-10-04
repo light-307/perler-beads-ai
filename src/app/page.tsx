@@ -80,6 +80,20 @@ const fullBeadPalette: PaletteColor[] = Object.entries(mardToHexMapping)
   })
   .filter((color): color is PaletteColor => color !== null);
 
+// MARD 系列前缀：默认色板中不选中的系列
+const DEFAULT_UNSELECTED_MARD_PREFIXES = ['P', 'Q', 'R', 'T', 'Y', 'ZG'];
+
+// 生成默认色板选择：全选，但不包含 P/Q/R/T/Y/ZG 系列
+function getDefaultPaletteSelections(): PaletteSelections {
+  const allHexValues = fullBeadPalette.map(color => color.hex.toUpperCase());
+  const selectedHexValues = allHexValues.filter(hexValue => {
+    const mardKey = Object.keys(mardToHexMapping)
+      .find(key => mardToHexMapping[key].toUpperCase() === hexValue) ?? '';
+    return !DEFAULT_UNSELECTED_MARD_PREFIXES.some(prefix => mardKey.startsWith(prefix));
+  });
+  return presetToSelections(allHexValues, selectedHexValues);
+}
+
 // ++ Add definition for background color keys ++
 
 // 1. 导入新组件
@@ -106,7 +120,7 @@ export default function Home() {
   const [similarityThreshold, setSimilarityThreshold] = useState<number>(30);
   const [similarityThresholdInput, setSimilarityThresholdInput] = useState<string>("30");
   // 添加像素化模式状态
-  const [pixelationMode, setPixelationMode] = useState<PixelationMode>(PixelationMode.Dominant); // 默认为卡通模式
+  const [pixelationMode, setPixelationMode] = useState<PixelationMode>(PixelationMode.Average); // 默认为真实模式
   
   // 新增：色号系统选择状态
   const [selectedColorSystem, setSelectedColorSystem] = useState<ColorSystem>('MARD');
@@ -362,18 +376,16 @@ export default function Home() {
     setIsCustomPalette(true);
     } else {
         console.log('所有数据都无效，清除localStorage并重新初始化');
-        // 如果本地数据无效，清除localStorage并默认选择所有颜色
+        // 如果本地数据无效，清除localStorage并使用默认选择（不选 P/Q/R/T/Y/ZG 系列）
         localStorage.removeItem('customPerlerPaletteSelections');
-        const allHexValues = fullBeadPalette.map(color => color.hex.toUpperCase());
-        const initialSelections = presetToSelections(allHexValues, allHexValues);
+        const initialSelections = getDefaultPaletteSelections();
       setCustomPaletteSelections(initialSelections);
       setIsCustomPalette(false);
     }
     } else {
-      console.log('没有localStorage数据，默认选择所有颜色');
-      // 如果没有保存的选择，默认选择所有颜色
-      const allHexValues = fullBeadPalette.map(color => color.hex.toUpperCase());
-      const initialSelections = presetToSelections(allHexValues, allHexValues);
+      console.log('没有localStorage数据，使用默认选择（不选 P/Q/R/T/Y/ZG 系列）');
+      // 如果没有保存的选择，使用默认选择（不选 P/Q/R/T/Y/ZG 系列）
+      const initialSelections = getDefaultPaletteSelections();
       setCustomPaletteSelections(initialSelections);
       setIsCustomPalette(false);
     }
@@ -642,7 +654,7 @@ export default function Home() {
     setTotalBeadCount(0);
     setInitialGridColorKeys(new Set()); // ++ 重置初始键 ++
     // ++ 重置横轴格子数量为默认值 ++
-    const defaultGranularity = 60;
+    const defaultGranularity = 50;
     setGranularity(defaultGranularity);
     setGranularityInput(defaultGranularity.toString());
     setRemapTrigger(prev => prev + 1); // Trigger full remap for new image

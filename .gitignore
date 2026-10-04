@@ -23,12 +23,16 @@
 # misc
 .DS_Store
 *.pem
+.npm-cache
 
 # debug
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
+
+# AI 工具本地配置（含本机绝对路径，不提交）
+.claude/
 
 # env files (can opt-in for committing if needed)
 .env*

@@ -1,5 +1,17 @@
 # 拼豆底稿生成器 (Perler Beads Generator)
 
+## 本地改动记录（此 fork）
+
+相对上游的已做改动：
+
+1. **横轴切割数量默认值**：上传/裁剪确认图片后（`src/app/page.tsx` `handleCropConfirm`）横轴格子数默认值由 60 改为 50。
+2. **处理模式默认值**：像素化模式默认由"卡通模式"（`Dominant`）改为"真实模式"（`Average`）（`src/app/page.tsx`）。
+3. **默认色板**：MARD 色板管理中心默认不再选中 **P、Q、R、T、Y、ZG** 系列（291 个色号中默认选中 221 个；仅在无本地保存记录时生效）。
+
+---
+
+> **以下为 fork 自 [liangdabiao/perler-beads-ai](https://github.com/liangdabiao/perler-beads-ai) 的原始内容**
+
 因为市面上的拼豆软件差强人意 ，所以我基于开源项目：https://github.com/Zippland/perler-beads ， 我加上AI优化了项目，AI辅助优化图片功能，写了一个专门生成拼豆图纸的网站。 经过大量测试，我觉得已经可以达到 一键生成拼豆图纸了！
 
 特别感谢佬友支持： [linux.do](https://linux.do/t/topic/1660924/)
@@ -9,16 +21,17 @@
 2，部署方法简单，无需任何配置。 可以cloudflare命令一键部署，也可以基于github代码拉取部署，也可以自行手动部署。
 cloudflare命令一键部署命令参考：
 ```
-npm run pages:dev
-npm run build
-npm run pages:deploy
+npm run build          # 先构建出 out/ 目录
+npm run pages:deploy   # 部署到 Cloudflare Pages
+# 如需本地模拟 Pages 环境（含 Pages Function）：npm run pages:dev
 ```
 3，部署完成后，即可在浏览器中访问。可以cloudflare免费域名，也可以绑定自己域名。
 
-### 非cloudflare部署 - 静态部署
-1,如果你想在非cloudflare环境部署，例如部署在自己服务器等等，也提供了一个独立的分支no-backend：
-https://github.com/liangdabiao/perler-beads-ai/tree/no-backend
-2，详细参考：[非cloudflare部署 - 静态部署](docs/静态部署方法配置指南.md)
+### 部署到自己的服务器
+
+本项目是纯静态导出（构建产物为 `out/`），任意静态主机都能托管；但 AI 优化接口 `/api/ai-optimize` 由 Cloudflare Pages Function 提供，在 Nginx/Apache 上并不存在，需要自行复刻，或者直接使用 Cloudflare Pages。
+
+详细步骤见 [自建服务器部署](docs/部署/自建服务器部署.md)。
 
 即梦 免费api （智能绘图）申请地址： https://console.volcengine.com/ai/ability/detail/1
 
@@ -27,16 +40,27 @@ https://github.com/liangdabiao/perler-beads-ai/tree/no-backend
 https://github.com/liangdabiao/perlerBeadsApplet
 
 
+## 文档导航
+
+| 文档 | 说明 |
+|------|------|
+| [部署：Cloudflare Pages](docs/部署/Cloudflare部署指南.md) | 推荐部署方式（静态导出 + Pages Function），含从零注册到 Preview Deployment 的完整步骤 |
+| [部署：自建服务器](docs/部署/自建服务器部署.md) | 非 Cloudflare 环境的部署说明（Nginx / Docker / PM2 等） |
+| [功能：一键去背景](docs/功能/一键去背景.md) | 一键去背景的实现原理、关键函数与调用链 |
+| [参考：即梦 4.0 接口文档](docs/参考/即梦4.0接口文档.md) | 火山引擎即梦（Jimeng）图像生成接口原始文档存档 |
+| [规划：双端云保存待办](docs/规划/双端云保存待办.md) | 网站端与小程序端共享作品数据的待办方案（当前未实现） |
+
 ## 展示案例
 
 核心就是： ai制作图纸  ，关键就是颜色尽可能少，颗粒尽可能少，各种各样图纸风格都兼容，同时表达尽可能清楚，这就是我的ai能够做到。
 
-![1.png](docs/1.png)
-![2.png](docs/2.png)
-![3.png](docs/3.png)
-![4.png](docs/4.png)
-![5.png](docs/5.png)
-![6.png](docs/6.png)
+![展示图-1](docs/images/展示图-1.png)
+![展示图-2](docs/images/展示图-2.png)
+![展示图-3](docs/images/展示图-3.png)
+![展示图-4](docs/images/展示图-4.png)
+![展示图-5](docs/images/展示图-5.png)
+![展示图-6](docs/images/展示图-6.png)
+![展示图-7](docs/images/展示图-7.png)
 
 
 
@@ -68,7 +92,8 @@ https://github.com/liangdabiao/perlerBeadsApplet
 14. AI优化功能，
 15. 导出图纸（支持多种格式和设置），
 16. 导出采购清单（支持CSV格式），
-17. 专心拼豆模式。
+17. 专心拼豆模式，
+18. 一键去背景。
 
 ❤️ 如果有需求可以直接提，我集成在网站里。
 
@@ -98,9 +123,9 @@ https://github.com/liangdabiao/perlerBeadsApplet
     *   **颜色合并**: 通过滑块调整相似颜色的合并阈值，平滑色块区域。
     *   **多种解析风格**: 支持不同的池化逻辑，适应不同类型的图片。
 *   **多色板支持**:
-    *   提供多种预设拼豆色板 (如 168色, 144色, 96色等) 可供选择。
+    *   内置 MARD 完整色板（291 个色号），可通过"管理色板"逐色勾选/取消；默认排除 P、Q、R、T、Y、ZG 系列（默认选中 221 色）。
     *   **多种色号系统**: 支持 MARD、COCO、漫漫、盼盼、咪小窝等多种色号系统。
-    *   **自定义调色板**: 允许用户创建和编辑自己的调色板。
+    *   **自定义调色板**: 允许用户创建和编辑自己的调色板，并支持导入/导出色板配置。
 *   **颜色排除与管理**:
     *   在颜色统计列表中点击可**排除/恢复**特定颜色。
     *   排除颜色后，原使用该颜色的区域将智能重映射到邻近的可用颜色。
@@ -116,6 +141,7 @@ https://github.com/liangdabiao/perlerBeadsApplet
     *   **颜色替换功能**: 可以批量替换特定颜色。
 *   **高级功能**:
     *   **图片裁剪**: 支持上传前裁剪图片。
+    *   **一键去背景**: 自动识别边缘主色并用洪水填充去除外部背景（详见 [一键去背景](docs/功能/一键去背景.md)）。
     *   **AI优化**: 提供AI辅助优化功能，将普通图片转换为适合拼豆的像素风格。
     *   **悬浮调色盘和工具栏**: 方便用户操作。
     *   **专心拼豆模式**: 提供沉浸式拼豆体验。
@@ -200,6 +226,8 @@ AI功能的实现涉及以下文件：
 -   **核心工具**: `src/utils/aiOptimize.ts` - AI优化相关工具函数
 -   **后端API**: `functions/api/ai-optimize.ts` - Cloudflare Pages Function，调用火山引擎API
 
+> 火山引擎即梦接口的原始文档存档见 [参考：即梦 4.0 接口文档](docs/参考/即梦4.0接口文档.md)。
+
 ### 优势
 
 1.  **智能化处理**: 利用AI技术自动处理图片，减少用户手动操作。
@@ -253,14 +281,14 @@ AI功能的实现涉及以下文件：
 
 ### 调色板数据
 
-预设的拼豆调色板数据定义在 `src/app/colorSystemMapping.json` 文件中，该文件包含了所有颜色的hex值到各个色号系统（MARD、COCO、漫漫、盼盼、咪小窝）的映射关系。不同的色板组合 (如 168色、96色等) 在 `src/app/page.tsx` 的 `paletteOptions` 中定义。
+预设的拼豆调色板数据定义在 `src/app/colorSystemMapping.json` 文件中，该文件包含 291 种颜色的 hex 值到各个色号系统（MARD、COCO、漫漫、盼盼、咪小窝）的映射关系。用户实际可用的色板由"管理色板"中的逐色选择（`customPaletteSelections`，持久化在 `localStorage`）决定；默认选择逻辑见 `src/app/page.tsx` 的 `getDefaultPaletteSelections()`（排除 P/Q/R/T/Y/ZG 系列）。
 
 ## 本地开发
 
 1.  克隆项目:
     ```bash
     git clone https://github.com/liangdabiao/perler-beads-ai.git
-    cd perler-beads
+    cd perler-beads-ai
     ```
 2.  安装依赖:
     ```bash
@@ -278,160 +306,26 @@ AI功能的实现涉及以下文件：
 
 ## 部署到 Cloudflare Pages（推荐）
 
-本项目采用 **Next.js 静态导出 + Cloudflare Pages Function** 架构，所有重计算（图像像素化、颜色映射）都在浏览器端完成，服务端仅有一个轻量 API（AI优化），部署简单、免费额度完全够用。
-
-### 前置准备
-
-1. 注册 [Cloudflare 账号](https://dash.cloudflare.com/sign-up)（免费）
-2. 安装 [Node.js](https://nodejs.org/)（v18+）
-3. 本地已克隆项目并完成 `npm install`
-
-### 方式一：命令行部署（推荐）
-
-#### 第 1 步：构建项目
+本项目采用 **Next.js 静态导出 + Cloudflare Pages Function** 架构：所有重计算（图像像素化、颜色映射）都在浏览器端完成，服务端仅有一个轻量的 AI 代理接口，免费额度完全够用。
 
 ```bash
-npm run build
+npm install
+npm run build          # 构建静态文件到 out/
+npm run pages:deploy   # 部署到 Cloudflare Pages
 ```
 
-构建完成后会在项目根目录生成 `out/` 文件夹，里面是纯静态文件（HTML/CSS/JS）。
+不使用 AI 优化功能时，连服务端环境变量都不需要配置。
 
-#### 第 2 步：登录 Cloudflare
-
-```bash
-npx wrangler login
-```
-
-浏览器会自动打开 Cloudflare 授权页面，点击 **Allow** 即可。
-
-#### 第 3 步：创建 Pages 项目并部署
-
-```bash
-npx wrangler pages project create perler-beads --production-branch main
-npx wrangler pages deploy out --project-name perler-beads
-```
-
-部署成功后终端会输出访问地址，格式类似：`https://perler-beads.pages.dev`
-
-#### 第 4 步：配置环境变量（AI 功能需要）
-
-如果你需要使用 AI 优化功能，需要配置火山引擎的 API 密钥：
-
-1. 打开 [Cloudflare Dashboard](https://dash.cloudflare.com/) → **Workers & Pages** → 选择 `perler-beads`
-2. 进入 **Settings** → **Environment Variables**
-3. 添加以下两个变量（选 **Production** 和 **Preview** 都勾上）：
-
-| 变量名 | 说明 |
-|--------|------|
-| `VOLC_ACCESS_KEY_ID` | 火山引擎 Access Key ID |
-| `VOLC_SECRET_ACCESS_KEY` | 火山引擎 Secret Access Key |
-
-> 如果你不需要 AI 优化功能，可以跳过此步骤。
-
-#### 第 5 步：配置自有域名重定向（可选）
-
-如果你有自己的域名并希望非官方域名自动跳转：
-
-1. 在 **Settings** → **Environment Variables** 中添加：
-   - 变量名：`NEXT_PUBLIC_OFFICIAL_DOMAIN`
-   - 变量值：`https://你的域名/`（例如 `https://liang.348349.xyz/`）
-
-2. 重新构建并部署（因为 `NEXT_PUBLIC_*` 变量在构建时注入）：
-   ```bash
-   npm run build
-   npx wrangler pages deploy out --project-name perler-beads
-   ```
-
-> **注意**：设置了此变量后，Cloudflare 提供的 `*.pages.dev` 域名会自动跳转到你配置的官方域名。如果不设置，则所有域名都能正常访问，不会跳转。
-
-#### 第 6 步：绑定自定义域名（可选）
-
-1. 进入 Cloudflare Dashboard → **Workers & Pages** → 选择 `perler-beads`
-2. **Settings** → **Custom domains** → **Add**
-3. 输入你的域名（需要域名已托管在 Cloudflare DNS 上）
-
----
-
-### 方式二：GitHub 自动部署（推荐给持续开发）
-
-这种方式每次推送代码到 GitHub 后会自动构建部署。
-
-#### 第 1 步：推送代码到 GitHub
-
-```bash
-git init
-git add .
-git commit -m "init"
-git remote add origin https://github.com/你的用户名/perler-beads.git
-git push -u origin main
-```
-
-#### 第 2 步：在 Cloudflare Dashboard 连接 GitHub
-
-1. 打开 [Cloudflare Dashboard](https://dash.cloudflare.com/) → **Workers & Pages** → **Create**
-2. 选择 **Connect to Git**
-3. 选择你的 GitHub 仓库 `perler-beads`
-4. 配置构建设置：
-
-| 设置项 | 值 |
-|--------|-----|
-| Framework preset | `Next.js (Static)` |
-| Build command | `npm run build` |
-| Build output directory | `out` |
-
-5. 点击 **Save and Deploy**
-
-#### 第 3 步：配置环境变量
-
-在项目的 **Settings** → **Environment Variables** 中添加：
-
-| 变量名 | 说明 | 是否必须 |
-|--------|------|---------|
-| `VOLC_ACCESS_KEY_ID` | 火山引擎 Access Key ID | AI 功能必须 |
-| `VOLC_SECRET_ACCESS_KEY` | 火山引擎 Secret Access Key | AI 功能必须 |
-| `NEXT_PUBLIC_OFFICIAL_DOMAIN` | 官方域名（如 `https://liang.348349.xyz/`） | 可选 |
-
-> **重要**：`NEXT_PUBLIC_OFFICIAL_DOMAIN` 是构建时变量，修改后需要重新触发构建（在 Deployments 页面点击 Retry deployment）。
-
----
-
-### 本地预览（模拟线上环境）
-
-如果你想在本机模拟 Cloudflare Pages 环境进行测试（包含 Pages Function）：
-
-1. 创建环境变量文件（仅用于本地，不会提交到 Git）：
-   ```bash
-   echo "VOLC_ACCESS_KEY_ID=你的key" > .dev.vars
-   echo "VOLC_SECRET_ACCESS_KEY=你的secret" >> .dev.vars
-   ```
-
-2. 启动本地预览：
-   ```bash
-   npm run pages:dev
-   ```
-
-3. 在浏览器打开 `http://127.0.0.1:8788`
-
----
-
-### 日常更新部署
-
-修改代码后，只需两步：
-
-```bash
-npm run build
-npx wrangler pages deploy out --project-name perler-beads
-```
+完整的部署步骤（从零注册 Cloudflare、Wrangler 命令行部署、连接 GitHub 自动部署、环境变量、Preview Deployment、自定义域名、常见问题）见 **[Cloudflare Pages 部署指南](docs/部署/Cloudflare部署指南.md)**。
 
 ### 常用命令速查
 
 | 命令 | 说明 |
 |------|------|
-| `npm run dev` | 本地开发（Next.js 开发服务器） |
+| `npm run dev` | 本地开发（Next.js 开发服务器，**不含** Pages Function） |
 | `npm run build` | 构建静态文件到 `out/` 目录 |
-| `npm run pages:dev` | 本地模拟 Cloudflare Pages 环境（含 API Function） |
-| `npm run pages:deploy` | 部署到 Cloudflare Pages |
-
+| `npm run pages:dev` | 本地模拟 Cloudflare Pages 环境（含 API Function，需先 build） |
+| `npm run pages:deploy` | 部署到 Cloudflare Pages（需先 build） |
 
 ## 许可证
 
