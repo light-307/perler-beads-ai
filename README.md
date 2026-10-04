@@ -21,16 +21,18 @@
 2，部署方法简单，无需任何配置。 可以cloudflare命令一键部署，也可以基于github代码拉取部署，也可以自行手动部署。
 cloudflare命令一键部署命令参考：
 ```
-npm run pages:dev
-npm run build
-npm run pages:deploy
+npm run build          # 先构建出 out/ 目录
+npm run pages:deploy   # 部署到 Cloudflare Pages
+# 如需本地模拟 Pages 环境（含 Pages Function）：npm run pages:dev
 ```
 3，部署完成后，即可在浏览器中访问。可以cloudflare免费域名，也可以绑定自己域名。
 
 ### 非cloudflare部署 - 静态部署
 1,如果你想在非cloudflare环境部署，例如部署在自己服务器等等，也提供了一个独立的分支no-backend：
 https://github.com/liangdabiao/perler-beads-ai/tree/no-backend
-2，详细参考：[非cloudflare部署 - 静态部署](docs/静态部署方法配置指南.md)
+2，详细参考：[非cloudflare部署 - 静态部署](docs/部署/静态部署-no-backend分支.md)
+
+> 注意：该文档描述的是 **no-backend 分支** 的部署方式（浏览器端直接调用火山引擎）。当前 `main` 分支的 AI 功能走 `functions/api/ai-optimize.ts`（Cloudflare Pages Function），纯静态主机上不会有可用的 `/api/ai-optimize`，请参照 [自建服务器部署](docs/部署/自建服务器部署.md)。
 
 即梦 免费api （智能绘图）申请地址： https://console.volcengine.com/ai/ability/detail/1
 
@@ -39,16 +41,28 @@ https://github.com/liangdabiao/perler-beads-ai/tree/no-backend
 https://github.com/liangdabiao/perlerBeadsApplet
 
 
+## 文档导航
+
+| 文档 | 说明 |
+|------|------|
+| [部署：Cloudflare Pages](#部署到-cloudflare-pages推荐) | 本文档下方章节，当前 `main` 分支的推荐部署方式（静态导出 + Pages Function） |
+| [部署：自建服务器](docs/部署/自建服务器部署.md) | 非 Cloudflare 环境的部署说明（Nginx / Docker / PM2 等） |
+| [部署：静态部署（no-backend 分支）](docs/部署/静态部署-no-backend分支.md) | 仅适用于 `no-backend` 分支的纯静态部署 |
+| [功能：一键去背景](docs/功能/一键去背景.md) | 一键去背景的实现原理、关键函数与调用链 |
+| [参考：即梦 4.0 接口文档](docs/参考/即梦4.0接口文档.md) | 火山引擎即梦（Jimeng）图像生成接口原始文档存档 |
+| [规划：双端云保存待办](docs/规划/双端云保存待办.md) | 网站端与小程序端共享作品数据的待办方案（当前未实现） |
+
 ## 展示案例
 
 核心就是： ai制作图纸  ，关键就是颜色尽可能少，颗粒尽可能少，各种各样图纸风格都兼容，同时表达尽可能清楚，这就是我的ai能够做到。
 
-![1.png](docs/1.png)
-![2.png](docs/2.png)
-![3.png](docs/3.png)
-![4.png](docs/4.png)
-![5.png](docs/5.png)
-![6.png](docs/6.png)
+![展示图-1](docs/images/展示图-1.png)
+![展示图-2](docs/images/展示图-2.png)
+![展示图-3](docs/images/展示图-3.png)
+![展示图-4](docs/images/展示图-4.png)
+![展示图-5](docs/images/展示图-5.png)
+![展示图-6](docs/images/展示图-6.png)
+![展示图-7](docs/images/展示图-7.png)
 
 
 
@@ -80,7 +94,8 @@ https://github.com/liangdabiao/perlerBeadsApplet
 14. AI优化功能，
 15. 导出图纸（支持多种格式和设置），
 16. 导出采购清单（支持CSV格式），
-17. 专心拼豆模式。
+17. 专心拼豆模式，
+18. 一键去背景。
 
 ❤️ 如果有需求可以直接提，我集成在网站里。
 
@@ -110,9 +125,9 @@ https://github.com/liangdabiao/perlerBeadsApplet
     *   **颜色合并**: 通过滑块调整相似颜色的合并阈值，平滑色块区域。
     *   **多种解析风格**: 支持不同的池化逻辑，适应不同类型的图片。
 *   **多色板支持**:
-    *   提供多种预设拼豆色板 (如 168色, 144色, 96色等) 可供选择。
+    *   内置 MARD 完整色板（291 个色号），可通过"管理色板"逐色勾选/取消；默认排除 P、Q、R、T、Y、ZG 系列（默认选中 221 色）。
     *   **多种色号系统**: 支持 MARD、COCO、漫漫、盼盼、咪小窝等多种色号系统。
-    *   **自定义调色板**: 允许用户创建和编辑自己的调色板。
+    *   **自定义调色板**: 允许用户创建和编辑自己的调色板，并支持导入/导出色板配置。
 *   **颜色排除与管理**:
     *   在颜色统计列表中点击可**排除/恢复**特定颜色。
     *   排除颜色后，原使用该颜色的区域将智能重映射到邻近的可用颜色。
@@ -128,6 +143,7 @@ https://github.com/liangdabiao/perlerBeadsApplet
     *   **颜色替换功能**: 可以批量替换特定颜色。
 *   **高级功能**:
     *   **图片裁剪**: 支持上传前裁剪图片。
+    *   **一键去背景**: 自动识别边缘主色并用洪水填充去除外部背景（详见 [一键去背景](docs/功能/一键去背景.md)）。
     *   **AI优化**: 提供AI辅助优化功能，将普通图片转换为适合拼豆的像素风格。
     *   **悬浮调色盘和工具栏**: 方便用户操作。
     *   **专心拼豆模式**: 提供沉浸式拼豆体验。
@@ -212,6 +228,8 @@ AI功能的实现涉及以下文件：
 -   **核心工具**: `src/utils/aiOptimize.ts` - AI优化相关工具函数
 -   **后端API**: `functions/api/ai-optimize.ts` - Cloudflare Pages Function，调用火山引擎API
 
+> 火山引擎即梦接口的原始文档存档见 [参考：即梦 4.0 接口文档](docs/参考/即梦4.0接口文档.md)。
+
 ### 优势
 
 1.  **智能化处理**: 利用AI技术自动处理图片，减少用户手动操作。
@@ -265,14 +283,14 @@ AI功能的实现涉及以下文件：
 
 ### 调色板数据
 
-预设的拼豆调色板数据定义在 `src/app/colorSystemMapping.json` 文件中，该文件包含了所有颜色的hex值到各个色号系统（MARD、COCO、漫漫、盼盼、咪小窝）的映射关系。不同的色板组合 (如 168色、96色等) 在 `src/app/page.tsx` 的 `paletteOptions` 中定义。
+预设的拼豆调色板数据定义在 `src/app/colorSystemMapping.json` 文件中，该文件包含 291 种颜色的 hex 值到各个色号系统（MARD、COCO、漫漫、盼盼、咪小窝）的映射关系。用户实际可用的色板由"管理色板"中的逐色选择（`customPaletteSelections`，持久化在 `localStorage`）决定；默认选择逻辑见 `src/app/page.tsx` 的 `getDefaultPaletteSelections()`（排除 P/Q/R/T/Y/ZG 系列）。
 
 ## 本地开发
 
 1.  克隆项目:
     ```bash
     git clone https://github.com/liangdabiao/perler-beads-ai.git
-    cd perler-beads
+    cd perler-beads-ai
     ```
 2.  安装依赖:
     ```bash

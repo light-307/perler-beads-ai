@@ -1,9 +1,12 @@
-# 静态部署方法 
- 
+# 静态部署方法（no-backend 分支）
+
+> ⚠️ **适用范围**：本文档描述的是 **`no-backend` 分支** 的部署方式。该分支没有 `functions/` 目录，AI 优化由浏览器通过 Web Crypto 直接签名调用火山引擎。
+>
+> 当前 `main` 分支的 AI 优化走 Cloudflare Pages Function（`functions/api/ai-optimize.ts`，见 [自建服务器部署](./自建服务器部署.md)），本文中的 `IS_STATIC_DEPLOYMENT` / `NEXT_PUBLIC_VOLC_*` 等环境变量在 `main` 分支上**并不存在**。
 
 ## 概述
 
-本项目支持通过**纯静态部署**方式使用 AI 图片优化功能。不需要 Cloudflare Workers 或 Node.js 服务端，AI API 调用直接在浏览器中完成。
+`no-backend` 分支支持通过**纯静态部署**方式使用 AI 图片优化功能。不需要 Cloudflare Workers 或 Node.js 服务端，AI API 调用直接在浏览器中完成。
 
 ## 工作原理
 
@@ -132,8 +135,8 @@ sudo certbot --nginx -d your-domain.com
 
 ### 关键文件
 
-- [volcEngineClient.ts](file:///d:/perler-beads-master/src/lib/volcEngineClient.ts) - 火山引擎 API 客户端（浏览器端）
-- [aiOptimize.ts](file:///d:/perler-beads-master/src/utils/aiOptimize.ts) - AI 优化入口，根据环境变量决定调用方式
+- `src/lib/volcEngineClient.ts` - 火山引擎 API 客户端（浏览器端）。**注意**：该文件只存在于 `no-backend` 分支，在 `main` 分支已被移除，因此本仓库当前工作树中不存在此路径。
+- [aiOptimize.ts](../../src/utils/aiOptimize.ts) - AI 优化入口（`no-backend` 分支中根据环境变量决定调用方式）
 
 ### 条件判断逻辑
 
