@@ -21,15 +21,15 @@
 2，部署方法简单，无需任何配置。 可以cloudflare命令一键部署，也可以基于github代码拉取部署，也可以自行手动部署。
 cloudflare命令一键部署命令参考：
 ```
-npm run build          # 先构建出 out/ 目录
-npm run pages:deploy   # 部署到 Cloudflare Pages
-# 如需本地模拟 Pages 环境（含 Pages Function）：npm run pages:dev
+npm run build     # 构建出 out/、out/_worker.js/ 与 out/.assetsignore
+npm run deploy    # 部署到 Cloudflare（npx wrangler deploy）
+# 如需本地预览完整环境（含 AI 接口）：npm run preview
 ```
 3，部署完成后，即可在浏览器中访问。可以cloudflare免费域名，也可以绑定自己域名。
 
 ### 部署到自己的服务器
 
-本项目是纯静态导出（构建产物为 `out/`），任意静态主机都能托管；但 AI 优化接口 `/api/ai-optimize` 由 Cloudflare Pages Function 提供，在 Nginx/Apache 上并不存在，需要自行复刻，或者直接使用 Cloudflare Pages。
+本项目是纯静态导出（构建产物为 `out/`），任意静态主机都能托管；但 AI 优化接口 `/api/ai-optimize` 由 Cloudflare 上的 Pages Function（编译为 Worker）提供，在 Nginx/Apache 上并不存在，需要自行复刻，或者直接使用 Cloudflare。
 
 详细步骤见 [自建服务器部署](docs/部署/自建服务器部署.md)。
 
@@ -44,7 +44,7 @@ https://github.com/liangdabiao/perlerBeadsApplet
 
 | 文档 | 说明 |
 |------|------|
-| [部署：Cloudflare Pages](docs/部署/Cloudflare部署指南.md) | 推荐部署方式（静态导出 + Pages Function），含从零注册到 Preview Deployment 的完整步骤 |
+| [部署：Cloudflare](docs/部署/Cloudflare部署指南.md) | 推荐部署方式（静态导出 + Pages Function 编译为 Worker），含从零注册到 Preview Deployment 的完整步骤 |
 | [部署：自建服务器](docs/部署/自建服务器部署.md) | 非 Cloudflare 环境的部署说明（Nginx / Docker / PM2 等） |
 | [功能：一键去背景](docs/功能/一键去背景.md) | 一键去背景的实现原理、关键函数与调用链 |
 | [参考：即梦 4.0 接口文档](docs/参考/即梦4.0接口文档.md) | 火山引擎即梦（Jimeng）图像生成接口原始文档存档 |
@@ -304,28 +304,31 @@ AI功能的实现涉及以下文件：
 
 ---
 
-## 部署到 Cloudflare Pages（推荐）
+## 部署到 Cloudflare（推荐）
 
-本项目采用 **Next.js 静态导出 + Cloudflare Pages Function** 架构：所有重计算（图像像素化、颜色映射）都在浏览器端完成，服务端仅有一个轻量的 AI 代理接口，免费额度完全够用。
+本项目采用 **Next.js 静态导出 + Cloudflare Pages Function（编译为 Worker）** 架构：所有重计算（图像像素化、颜色映射）都在浏览器端完成，服务端仅有一个轻量的 AI 代理接口，免费额度完全够用。
 
 ```bash
 npm install
-npm run build          # 构建静态文件到 out/
-npm run pages:deploy   # 部署到 Cloudflare Pages
+npm run build     # 构建静态文件到 out/，并把 functions/ 编译成 out/_worker.js/
+npm run deploy    # 部署到 Cloudflare
 ```
 
 不使用 AI 优化功能时，连服务端环境变量都不需要配置。
 
-完整的部署步骤（从零注册 Cloudflare、Wrangler 命令行部署、连接 GitHub 自动部署、环境变量、Preview Deployment、自定义域名、常见问题）见 **[Cloudflare Pages 部署指南](docs/部署/Cloudflare部署指南.md)**。
+> 新版 Cloudflare 面板不再有「Build output directory」输入框：静态目录写在仓库的 `wrangler.jsonc` 里，面板的 Deploy command 用 `npx wrangler deploy`。
+
+完整的部署步骤（从零注册 Cloudflare、Wrangler 命令行部署、连接 GitHub 自动部署、环境变量、Preview Deployment、自定义域名、常见问题）见 **[Cloudflare 部署指南](docs/部署/Cloudflare部署指南.md)**。
 
 ### 常用命令速查
 
 | 命令 | 说明 |
 |------|------|
-| `npm run dev` | 本地开发（Next.js 开发服务器，**不含** Pages Function） |
-| `npm run build` | 构建静态文件到 `out/` 目录 |
-| `npm run pages:dev` | 本地模拟 Cloudflare Pages 环境（含 API Function，需先 build） |
-| `npm run pages:deploy` | 部署到 Cloudflare Pages（需先 build） |
+| `npm run dev` | 本地开发（Next.js 开发服务器，**不含** AI 接口） |
+| `npm run build` | `next build` + 编译 `functions/` 为 Worker + 生成 `out/.assetsignore` |
+| `npm run preview` | 本地预览完整环境（`npm run build` + `wrangler dev`，含 AI 接口） |
+| `npm run deploy` | 部署到 Cloudflare（需先 build） |
+| `npx wrangler deploy --dry-run` | 只校验部署配置，不上传 |
 
 ## 许可证
 

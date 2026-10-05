@@ -4,11 +4,11 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "next build && wrangler pages functions build --outdir=./out/_worker.js/ && node scripts/postbuild-assets.mjs",
     "start": "next start",
     "lint": "next lint",
-    "pages:dev": "npx wrangler pages dev out --compatibility-flag=nodejs_compat",
-    "pages:deploy": "npx wrangler pages deploy out"
+    "preview": "npm run build && wrangler dev",
+    "deploy": "wrangler deploy"
   },
   "dependencies": {
     "cropperjs": "^2.1.0",

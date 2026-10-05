@@ -6,7 +6,7 @@
 
 | 文档 | 适用场景 |
 |------|----------|
-| [Cloudflare Pages 部署指南](部署/Cloudflare部署指南.md) | **推荐**：静态导出 + Pages Function，含从零注册、环境变量、Preview Deployment、自定义域名 |
+| [Cloudflare 部署指南](部署/Cloudflare部署指南.md) | **推荐**：静态导出 + Pages Function（编译为 Worker），含从零注册、环境变量、Preview Deployment、自定义域名，以及新版面板「没有 Build output directory」的处理 |
 | [自建服务器部署](部署/自建服务器部署.md) | 部署到自己的服务器（Nginx / Node.js / Docker） |
 
 > 早期还有一个 `no-backend` 分支（浏览器直连火山引擎的纯静态方案），已废弃并从仓库移除；如需查阅历史内容可用 tag `archive/no-backend`。
