@@ -13,6 +13,18 @@
 
 也就是说：像素化、颜色映射、导出图纸等重计算全部在浏览器里完成；服务端只有一个用来代理火山引擎即梦 API 的轻量接口，密钥只存放在 Cloudflare 的环境变量里，不会进入前端产物。
 
+> **本项目部署在 Worker 项目下，不是 Pages 项目。** 在 **Workers & Pages** 列表里它位于 **Workers** 标签页。两者的区别只影响「配置写在哪儿、命令叫什么」，不影响本站的任何功能：
+>
+> | | Pages 项目（旧） | Worker 项目（本项目，现阶段默认） |
+> |---|---|---|
+> | 配置键 | `pages_build_output_dir = "./out"` | `assets.directory` + `main` |
+> | 静态资源 | 整个输出目录直接上传 | 由 `assets` 声明目录，走 Assets + CDN |
+> | 服务端代码 | 输出目录里的 `_worker.js/` | `main` 指向的 Worker 入口（本仓库同为 `out/_worker.js/`） |
+> | 自带访问域名 | `*.pages.dev` | `*.workers.dev` |
+> | 自定义域名 | 都支持 | 都支持 |
+>
+> Cloudflare 现在新建项目默认就是 Worker，创建时**没有** Pages/Worker 二选一的入口——所以不需要去找这个开关，按本文的 Worker 配置走即可。
+
 ### 1.1 注意：新版 Cloudflare 面板没有「Build output directory」
 
 Cloudflare 正在把 Pages 统一到 Workers 上。新面板不再提供 **Build output directory** 这一项，而是让构建流程变成两步：
