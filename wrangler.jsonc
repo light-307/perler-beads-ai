@@ -1,6 +1,7 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "perler-beads",
+  // 必须与 Cloudflare 面板上的项目（Worker）名一致，否则 deploy 会新建一个 Worker
+  "name": "perler-beads-ai",
   "compatibility_date": "2024-12-01",
 
   // next build（next.config.ts 里 output: "export"）导出的静态资源目录

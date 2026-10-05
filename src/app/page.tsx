@@ -1098,13 +1098,15 @@ export default function Home() {
       const targetDomain = process.env.NEXT_PUBLIC_OFFICIAL_DOMAIN;
       if (!targetDomain) return;
       
-      // 排除localhost和127.0.0.1等本地开发环境，以及Cloudflare Pages域名
+      // 排除localhost和127.0.0.1等本地开发环境，以及 Cloudflare 自带的
+      // *.pages.dev / *.workers.dev 预览与生产子域
       const isLocalhost = currentHostname === 'localhost' ||
                          currentHostname === '127.0.0.1' ||
                          currentHostname.startsWith('192.168.') ||
                          currentHostname.startsWith('10.') ||
                          currentHostname.endsWith('.local') ||
-                         currentHostname.endsWith('.pages.dev');
+                         currentHostname.endsWith('.pages.dev') ||
+                         currentHostname.endsWith('.workers.dev');
       
       // 检查当前URL是否不是目标域名，且不是本地开发环境
       if (!currentUrl.startsWith(targetDomain) && !isLocalhost) {

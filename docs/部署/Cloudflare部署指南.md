@@ -24,12 +24,14 @@ Cloudflare 正在把 Pages 统一到 Workers 上。新面板不再提供 **Build
 
 ```jsonc
 {
-  "name": "perler-beads",
+  "name": "perler-beads-ai",                                 // 必须与面板上的项目名一致
   "compatibility_date": "2024-12-01",
   "assets": { "directory": "./out", "binding": "ASSETS" },  // 静态资源目录
   "main": "./out/_worker.js/index.js"                        // Pages Functions 编译产物
 }
 ```
+
+> **`name` 必须与面板上的项目名完全一致**。`wrangler deploy` 是按这个名字找项目的：名字不一致时它不会报错，而是**悄悄新建一个同名 Worker**，你的域名和预览地址仍然指向旧项目，表现为「构建成功但网站没更新」。
 
 > 如果 Deploy command 还停留在 `wrangler pages deploy`，请改成 `npx wrangler deploy`。旧命令属于已废弃的 Pages 上传链路，在新面板上会缺少配置来源。
 
@@ -90,8 +92,8 @@ npm run build     # 产出 out/、out/_worker.js/ 与 out/.assetsignore
 npm run deploy    # 等价于 npx wrangler deploy
 ```
 
-- 部署成功后终端会输出访问地址，形如 `https://perler-beads.<你的账户子域>.workers.dev`。
-- Worker 名字取自 `wrangler.jsonc` 的 `name`（`perler-beads`）。
+- 部署成功后终端会输出访问地址，形如 `https://perler-beads-ai.<你的账户子域>.workers.dev`。
+- Worker 名字取自 `wrangler.jsonc` 的 `name`（本仓库为 `perler-beads-ai`）。
 - 先自检配置是否正确，可以只做一次演练（不会真的上传）：
 
   ```bash
@@ -102,7 +104,7 @@ npm run deploy    # 等价于 npx wrangler deploy
 
 ### 第 3 步：配置环境变量（AI 优化需要）
 
-1. 打开 [Cloudflare Dashboard](https://dash.cloudflare.com/) → **Workers & Pages** → 选择 `perler-beads`。
+1. 打开 [Cloudflare Dashboard](https://dash.cloudflare.com/) → **Workers & Pages** → 选择 `perler-beads-ai`。
 2. **Settings** → **Variables and Secrets** → **Add**。
 3. 添加下面两个变量，类型都选 **Secret**，并在 **Production** 和 **Preview** 上都勾选：
 
@@ -145,7 +147,7 @@ npm run deploy    # 等价于 npx wrangler deploy
    Success: Build command completed
    Executing user deploy command: npx wrangler deploy
    ✨ Read 64 files from the assets directory .../out
-   Deployed perler-beads triggers ...
+   Deployed perler-beads-ai triggers ...
    ```
 
 4. 再到 **Settings** → **Variables and Secrets** 按第 3 节第 3 步添加 `VOLC_*` 两个密钥。
@@ -230,10 +232,13 @@ npm run preview
 它是构建时变量，必须重新构建（Retry deployment / 重新 push），只改环境变量不够。
 
 **Q7：预览分支上打开站点立刻跳走了。**
-把 `NEXT_PUBLIC_OFFICIAL_DOMAIN` 从 **Preview** 环境移除，只保留 **Production**。
+`NEXT_PUBLIC_OFFICIAL_DOMAIN` 只应设在 **Production** 环境，预览环境留空（它只在生产域名不是目标域名时才跳转）。代码里对 `localhost`、局域网 IP、`*.pages.dev`、`*.workers.dev` 已做豁免，所以 CF 自动生成的预览地址不会被跳转；但如果你给预览绑了自定义域名，仍需把该变量从 Preview 环境移除。
 
 **Q8：从旧 Pages 项目迁移过来的话要改什么？**
 一句话：`wrangler.toml` 换成 `wrangler.jsonc` 并补上 `assets` / `main`；面板的 Deploy command 换成 `npx wrangler deploy`；`npm run pages:deploy` 更名为 `npm run deploy`、`npm run pages:dev` 更名为 `npm run preview`。功能与地址不变。
+
+**Q9：构建和部署都成功了，但访问网站还是旧内容。**
+九成是 `wrangler.jsonc` 的 `name` 和面板上的项目名不一致。`wrangler deploy` 按 `name` 找项目，找不到就**静默新建一个同名 Worker**，于是这次部署根本没有落到你域名指向的那个项目上。到 **Workers & Pages** 列表里看是不是多了一个项目，把 `name` 改成与面板项目名完全一致（本仓库为 `perler-beads-ai`）后重新部署。
 
 ## 10. 相关文档
 
