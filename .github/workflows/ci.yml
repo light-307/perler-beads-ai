@@ -24,5 +24,12 @@ jobs:
       - name: 安装依赖
         run: npm ci
 
-      - name: 构建静态站点
+      - name: 构建静态站点（含 functions/ 编译与 .assetsignore 生成）
         run: npm run build
+        env:
+          WRANGLER_SEND_METRICS: "false"
+
+      - name: 校验 Cloudflare 部署配置
+        run: npx wrangler deploy --dry-run
+        env:
+          WRANGLER_SEND_METRICS: "false"

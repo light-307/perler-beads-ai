@@ -8,19 +8,22 @@
 
 - **框架**：Next.js 15.3.6（App Router）+ React 19 + TypeScript
 - **样式**：Tailwind CSS 4（`@tailwindcss/postcss`）
-- **部署形态**：`next.config.ts` 中 `output: "export"`（静态导出到 `out/`）+ Cloudflare Pages
-- **服务端代码**：仅 `functions/api/ai-optimize.ts`（Cloudflare **Pages Function**，非 Next.js API Route）
+- **部署形态**：`next.config.ts` 中 `output: "export"`（静态导出到 `out/`），部署在 Cloudflare（静态资源走 Assets，`functions/` 编译为 Worker）
+- **服务端代码**：仅 `functions/api/ai-optimize.ts`（Cloudflare **Pages Function**，非 Next.js API Route；构建时由 `wrangler pages functions build` 编译成 `out/_worker.js/index.js`）
+- **Cloudflare 配置**：`wrangler.jsonc`（`assets.directory = ./out`、`main = ./out/_worker.js/index.js`）。**注意**：新版 Cloudflare 面板已取消「Build output directory」，改由该文件声明；部署命令是 `wrangler deploy`，不是已废弃的 `wrangler pages deploy`
 
 ## 常用命令
 
 ```bash
 npm install
-npm run dev          # Next.js 开发服务器（http://localhost:3000）
-npm run build        # 静态导出到 out/
+npm run dev          # Next.js 开发服务器（http://localhost:3000），不含 AI 接口
+npm run build        # next build + 编译 functions/ 为 Worker + 生成 out/.assetsignore
 npm run lint         # ESLint
-npm run pages:dev    # 本地模拟 Cloudflare Pages 环境（含 Pages Function，需先 build）
-npm run pages:deploy # 部署到 Cloudflare Pages（需先 build）
+npm run preview      # 本地预览完整环境（npm run build && wrangler dev，http://127.0.0.1:8787）
+npm run deploy       # 部署到 Cloudflare（需先 build）
 ```
+
+> `npm run build` 三步缺一不可：少了 `wrangler pages functions build` 会导致 `main` 指向的文件不存在；少了 `scripts/postbuild-assets.mjs` 生成的 `out/.assetsignore`，Wrangler 会因 `_worker.js` 被当作静态资源而**直接报错拒绝部署**。
 
 ## 架构要点
 
@@ -45,8 +48,8 @@ npm run pages:deploy # 部署到 Cloudflare Pages（需先 build）
 ### AI 优化
 
 - 前端始终调用同源接口：`src/utils/aiOptimize.ts` 中 `fetch('/api/ai-optimize')`。
-- 该路径由 `functions/api/ai-optimize.ts` 在 Cloudflare Pages 上实现，调用火山引擎即梦（`req_key: jimeng_t2i_v40`，`CVSync2AsyncSubmitTask` / `CVSync2AsyncGetResult`，HMAC-SHA256 签名，轮询最长约 3 分钟），需要环境变量 `VOLC_ACCESS_KEY_ID` / `VOLC_SECRET_ACCESS_KEY`。
-- **已知现象**：`output: "export"` 下 `npm run dev` 没有 Pages Function，AI 优化会 404，这是预期行为；本地联调请用 `npm run pages:dev`。
+- 该路径由 `functions/api/ai-optimize.ts` 提供（构建时编译进 Worker），调用火山引擎即梦（`req_key: jimeng_t2i_v40`，`CVSync2AsyncSubmitTask` / `CVSync2AsyncGetResult`，HMAC-SHA256 签名，轮询最长约 3 分钟），需要环境变量 `VOLC_ACCESS_KEY_ID` / `VOLC_SECRET_ACCESS_KEY`。
+- **已知现象**：`output: "export"` 下 `npm run dev` 没有这个接口，AI 优化会 404，这是预期行为；本地联调请用 `npm run preview`。
 - 早期存在一个 `no-backend` 分支（浏览器用 Web Crypto 直接调用火山引擎），**已废弃**：分支已从仓库移除，归档在 tag `archive/no-backend`，其客户端文件 `src/lib/volcEngineClient.ts` 也已删除。
 
 ## 注意事项

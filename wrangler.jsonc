@@ -1,0 +1,14 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "perler-beads",
+  "compatibility_date": "2024-12-01",
+
+  // next build（next.config.ts 里 output: "export"）导出的静态资源目录
+  "assets": {
+    "directory": "./out",
+    "binding": "ASSETS"
+  },
+
+  // Pages Functions 编译产物，由 `npm run build` 生成（见 scripts/ 与 docs/部署/Cloudflare部署指南.md）
+  "main": "./out/_worker.js/index.js"
+}
