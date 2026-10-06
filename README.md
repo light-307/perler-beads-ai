@@ -1,20 +1,6 @@
 # 拼豆底稿生成器 (Perler Beads Generator)
 
-## 本地改动记录（此 fork）
-
-相对上游的已做改动：
-
-1. **横轴切割数量默认值**：上传/裁剪确认图片后（`src/app/page.tsx` `handleCropConfirm`）横轴格子数默认值由 60 改为 50。
-2. **处理模式默认值**：像素化模式默认由"卡通模式"（`Dominant`）改为"真实模式"（`Average`）（`src/app/page.tsx`）。
-3. **默认色板**：MARD 色板管理中心默认不再选中 **P、Q、R、T、Y、ZG** 系列（291 个色号中默认选中 221 个；仅在无本地保存记录时生效）。
-
----
-
-> **以下为 fork 自 [liangdabiao/perler-beads-ai](https://github.com/liangdabiao/perler-beads-ai) 的原始内容**
-
-因为市面上的拼豆软件差强人意 ，所以我基于开源项目：https://github.com/Zippland/perler-beads ， 我加上AI优化了项目，AI辅助优化图片功能，写了一个专门生成拼豆图纸的网站。 经过大量测试，我觉得已经可以达到 一键生成拼豆图纸了！
-
-特别感谢佬友支持： [linux.do](https://linux.do/t/topic/1660924/)
+基于开源项目：https://github.com/liangdabiao/perler-beads-ai
 
 ### 部署方法：
 1，完全免费的，无需任何费用。利用了cloudflare page + 即梦 免费api
@@ -35,10 +21,8 @@ npm run deploy    # 部署到 Cloudflare（npx wrangler deploy）
 
 即梦 免费api （智能绘图）申请地址： https://console.volcengine.com/ai/ability/detail/1
 
-### 免费小程序
-基于类似的功能，我已经完成一个不错的小程序，免费提供给大家使用。
-https://github.com/liangdabiao/perlerBeadsApplet
-
+### 微信小程序
+类似的功能，基于开源项目：https://github.com/liangdabiao/perlerBeadsApplet
 
 ## 文档导航
 
@@ -94,14 +78,6 @@ https://github.com/liangdabiao/perlerBeadsApplet
 16. 导出采购清单（支持CSV格式），
 17. 专心拼豆模式，
 18. 一键去背景。
-
-❤️ 如果有需求可以直接提，我集成在网站里。
-
-✅
-对于商家，我把算法的改进思路放在这里，
-希望你们可以越做越好。
-如果有其他想二开的同学，可以直接在项目提交pr，
-这个思路也可以直接使用̋(ˊ•͈ꇴ•͈ˋ)
 
 ### 1️⃣ 初始颜色映射
 黑色毛边是因为池化过程中对RGB 采用了 mean 操作，改为局部  max pooling ，每个单元，找到像素频率最高的 RGB 值，用欧氏距离查找最近的颜色就行
