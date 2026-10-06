@@ -47,7 +47,10 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className="">
+    // suppressHydrationWarning：浏览器扩展（如注入 data-redeviation-bs-uid 的脚本）
+    // 会在 React 水合前改写 <html> 的属性，服务端无法预知，会导致水合告警。
+    // 该属性只对 <html> 自身生效，不影响子树的正常水合校验。
+    <html lang="zh-CN" className="" suppressHydrationWarning>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased overflow-x-hidden bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100`}
       >
