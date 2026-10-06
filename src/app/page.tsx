@@ -105,7 +105,7 @@ import FloatingToolbar from '../components/FloatingToolbar';
 import MagnifierTool from '../components/MagnifierTool';
 import MagnifierSelectionOverlay from '../components/MagnifierSelectionOverlay';
 import { loadPaletteSelections, savePaletteSelections, presetToSelections, PaletteSelections } from '../utils/localStorageUtils';
-import { TRANSPARENT_KEY, transparentColorData } from '../utils/pixelEditingUtils';
+import { TRANSPARENT_KEY, transparentColorData, recalculateColorStats } from '../utils/pixelEditingUtils';
 
 // 1. 导入新的 DonationModal 组件
 import DonationModal from '../components/DonationModal';
@@ -144,6 +144,11 @@ export default function Home() {
   const [gridDimensions, setGridDimensions] = useState<{ N: number; M: number } | null>(null);
   const [colorCounts, setColorCounts] = useState<{ [key: string]: { count: number; color: string } } | null>(null);
   const [totalBeadCount, setTotalBeadCount] = useState<number>(0);
+  // 一键去背景的撤销记录：只记录被改成透明的格子及其原始数据，撤销时精确还原
+  const [backgroundRemovalUndo, setBackgroundRemovalUndo] = useState<{
+    grid: { N: number; M: number };
+    changedCells: { row: number; col: number; original: MappedPixel }[];
+  } | null>(null);
   const [tooltipData, setTooltipData] = useState<{ x: number, y: number, key: string, color: string } | null>(null);
   const [remapTrigger, setRemapTrigger] = useState<number>(0);
   const [isManualColoringMode, setIsManualColoringMode] = useState<boolean>(false);
@@ -661,6 +666,7 @@ export default function Home() {
   // 处理裁剪确认
   const handleCropConfirm = (croppedImageSrc: string) => {
     setOriginalImageSrc(croppedImageSrc);
+    setBackgroundRemovalUndo(null);
     setMappedPixelData(null);
     setGridDimensions(null);
     setColorCounts(null);
@@ -713,6 +719,7 @@ export default function Home() {
   const handleAIOptimized = (optimizedImageSrc: string) => {
     // 使用优化后的图片替换原图，并重新处理
     setOriginalImageSrc(optimizedImageSrc);
+    setBackgroundRemovalUndo(null);
     // 新增：优化后图片宽高比可能变化，保持长宽比时按新比例重算纵轴切割数量
     if (maintainAspectRatio) {
       setVerticalGranularity(null);
@@ -908,6 +915,7 @@ export default function Home() {
         pixelatedCtx.clearRect(0, 0, pixelatedCanvas.width, pixelatedCanvas.height);
         setMappedPixelData(null);
         setGridDimensions(null);
+        setBackgroundRemovalUndo(null);
         // Keep colorCounts potentially showing the last valid counts? Or clear them too?
         // setColorCounts(null); // Decide if clearing counts is desired when palette is empty
         // setTotalBeadCount(0);
@@ -923,6 +931,7 @@ export default function Home() {
     img.onerror = (error: Event | string) => {
       console.error("Image loading failed:", error); 
       alert("无法加载图片。");
+      setBackgroundRemovalUndo(null);
       setOriginalImageSrc(null); 
       setMappedPixelData(null); 
       setGridDimensions(null); 
@@ -1118,6 +1127,8 @@ export default function Home() {
 
       // --- 绘制和状态更新 ---
       if (pixelatedCanvasRef.current) {
+        // 重新像素化会重建整张图，旧的去背景撤销记录不再适用
+        setBackgroundRemovalUndo(null);
         setMappedPixelData(mergedData);
         setGridDimensions({ N, M });
 
@@ -1177,6 +1188,7 @@ export default function Home() {
         }
         setMappedPixelData(null);
         setGridDimensions(null);
+        setBackgroundRemovalUndo(null);
         // Keep colorCounts to allow user to un-exclude colors
         // setColorCounts(null);
         // setTotalBeadCount(0);
@@ -1437,6 +1449,8 @@ export default function Home() {
     const newPixelData = mappedPixelData.map(row => row.map(cell => ({ ...cell })));
     const visited = Array(M).fill(null).map(() => Array(N).fill(false));
     const stack: { row: number; col: number }[] = [];
+    // 记录本次被改成透明的格子及其原始数据，供"撤销去背景"精确还原
+    const changedCells: { row: number; col: number; original: MappedPixel }[] = [];
 
     const pushIfTarget = (row: number, col: number) => {
       if (row < 0 || row >= M || col < 0 || col >= N || visited[row][col]) {
@@ -1464,6 +1478,7 @@ export default function Home() {
 
     while (stack.length > 0) {
       const { row, col } = stack.pop()!;
+      changedCells.push({ row, col, original: newPixelData[row][col] });
       newPixelData[row][col] = { ...transparentColorData };
       pushIfTarget(row - 1, col);
       pushIfTarget(row + 1, col);
@@ -1473,25 +1488,42 @@ export default function Home() {
 
     setMappedPixelData(newPixelData);
 
-    const newColorCounts: { [hexKey: string]: { count: number; color: string } } = {};
-    let newTotalCount = 0;
-    newPixelData.flat().forEach(cell => {
-      if (cell && !cell.isExternal && cell.key !== TRANSPARENT_KEY) {
-        const cellHex = cell.color.toUpperCase();
-        if (!newColorCounts[cellHex]) {
-          newColorCounts[cellHex] = {
-            count: 0,
-            color: cellHex
-          };
-        }
-        newColorCounts[cellHex].count++;
-        newTotalCount++;
-      }
-    });
+    const { colorCounts: newColorCounts, totalCount: newTotalCount } = recalculateColorStats(newPixelData);
 
     setColorCounts(newColorCounts);
     setTotalBeadCount(newTotalCount);
     setInitialGridColorKeys(new Set(Object.keys(newColorCounts)));
+    // 只有真正去除了格子才留下可撤销记录（覆盖上一次记录，仅保留最近一次）
+    setBackgroundRemovalUndo({ grid: { N, M }, changedCells });
+  };
+
+  // 撤销一键去背景：把上次被去除的格子还原，并按当前像素数据重算统计
+  const handleUndoRemoveBackground = () => {
+    if (!backgroundRemovalUndo || !mappedPixelData || !gridDimensions) return;
+
+    const { N, M } = gridDimensions;
+    const { grid, changedCells } = backgroundRemovalUndo;
+
+    // 网格尺寸已变化（重新像素化等），旧坐标不再有效，直接丢弃记录
+    if (grid.N !== N || grid.M !== M) {
+      setBackgroundRemovalUndo(null);
+      return;
+    }
+
+    const newPixelData = mappedPixelData.map(row => row.map(cell => ({ ...cell })));
+    changedCells.forEach(({ row, col, original }) => {
+      if (newPixelData[row]?.[col]) {
+        newPixelData[row][col] = { ...original };
+      }
+    });
+
+    setMappedPixelData(newPixelData);
+
+    const { colorCounts: newColorCounts, totalCount: newTotalCount } = recalculateColorStats(newPixelData);
+    setColorCounts(newColorCounts);
+    setTotalBeadCount(newTotalCount);
+    setInitialGridColorKeys(new Set(Object.keys(newColorCounts)));
+    setBackgroundRemovalUndo(null);
   };
 
   // --- Tooltip Logic ---
@@ -2349,6 +2381,17 @@ export default function Home() {
                     className="inline-flex items-center justify-center h-9 px-3 text-sm rounded-md border border-blue-200 dark:border-blue-700 bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-200 hover:bg-blue-100 dark:hover:bg-blue-800/40 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
                   >
                     一键去背景
+                  </button>
+                  <button
+                    onClick={handleUndoRemoveBackground}
+                    disabled={!backgroundRemovalUndo || !mappedPixelData || !gridDimensions}
+                    title="恢复到点击「一键去背景」之前的状态"
+                    className="inline-flex items-center justify-center h-9 px-3 text-sm rounded-md border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700/40 text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700/70 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
+                  >
+                    <svg className="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 15L3 9m0 0l6-6M3 9h12a6 6 0 010 12h-3" />
+                    </svg>
+                    撤销去背景
                   </button>
                 </div>
 
