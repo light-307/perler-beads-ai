@@ -1,33 +1,45 @@
 # 拼豆底稿生成器 (Perler Beads Generator)
 
-## 本地改动记录（此 fork）
+基于开源项目：https://github.com/liangdabiao/perler-beads-ai
 
-相对上游的已做改动：
+## 快速开始
 
-1. **横轴切割数量默认值**：上传/裁剪确认图片后（`src/app/page.tsx` `handleCropConfirm`）横轴格子数默认值由 60 改为 50。
-2. **处理模式默认值**：像素化模式默认由"卡通模式"（`Dominant`）改为"真实模式"（`Average`）（`src/app/page.tsx`）。
-3. **默认色板**：MARD 色板管理中心默认不再选中 **P、Q、R、T、Y、ZG** 系列（291 个色号中默认选中 221 个；仅在无本地保存记录时生效）。
+本项目采用 **Next.js 静态导出 + Cloudflare Pages Function（编译为 Worker）** 架构：像素化、颜色映射等重计算全部在浏览器端完成，服务端只有一个轻量的 AI 代理接口，Cloudflare 免费额度完全够用——**完全免费、无需任何配置、部署完成即可用浏览器访问**（可用 Cloudflare 免费域名，也可绑定自己的域名）。
 
----
+### 本地开发
 
-> **以下为 fork 自 [liangdabiao/perler-beads-ai](https://github.com/liangdabiao/perler-beads-ai) 的原始内容**
-
-因为市面上的拼豆软件差强人意 ，所以我基于开源项目：https://github.com/Zippland/perler-beads ， 我加上AI优化了项目，AI辅助优化图片功能，写了一个专门生成拼豆图纸的网站。 经过大量测试，我觉得已经可以达到 一键生成拼豆图纸了！
-
-特别感谢佬友支持： [linux.do](https://linux.do/t/topic/1660924/)
-
-### 部署方法：
-1，完全免费的，无需任何费用。利用了cloudflare page + 即梦 免费api
-2，部署方法简单，无需任何配置。 可以cloudflare命令一键部署，也可以基于github代码拉取部署，也可以自行手动部署。
-cloudflare命令一键部署命令参考：
+```bash
+git clone https://github.com/liangdabiao/perler-beads-ai.git
+cd perler-beads-ai
+npm install
+npm run dev       # 打开 http://localhost:3000（Next.js 开发服务器，不含 AI 接口）
 ```
+
+### 部署到 Cloudflare
+
+```bash
 npm run build     # 构建出 out/、out/_worker.js/ 与 out/.assetsignore
 npm run deploy    # 部署到 Cloudflare（npx wrangler deploy）
 # 如需本地预览完整环境（含 AI 接口）：npm run preview
 ```
-3，部署完成后，即可在浏览器中访问。可以cloudflare免费域名，也可以绑定自己域名。
 
-### 部署到自己的服务器
+不使用 AI 优化功能时，连服务端环境变量都不需要配置。
+
+> 新版 Cloudflare 面板不再有「Build output directory」输入框：静态目录写在仓库的 `wrangler.jsonc` 里，面板的 Deploy command 用 `npx wrangler deploy`。
+
+完整的部署步骤（从零注册 Cloudflare、Wrangler 命令行部署、连接 GitHub 自动部署、环境变量、Preview Deployment、自定义域名、常见问题）见 **[Cloudflare 部署指南](docs/部署/Cloudflare部署指南.md)**。
+
+### 常用命令速查
+
+| 命令 | 说明 |
+|------|------|
+| `npm run dev` | 本地开发（Next.js 开发服务器，**不含** AI 接口） |
+| `npm run build` | `next build` + 编译 `functions/` 为 Worker + 生成 `out/.assetsignore` |
+| `npm run preview` | 本地预览完整环境（`npm run build` + `wrangler dev`，含 AI 接口） |
+| `npm run deploy` | 部署到 Cloudflare（需先 build） |
+| `npx wrangler deploy --dry-run` | 只校验部署配置，不上传 |
+
+## 部署到自己的服务器
 
 本项目是纯静态导出（构建产物为 `out/`），任意静态主机都能托管；但 AI 优化接口 `/api/ai-optimize` 由 Cloudflare 上的 Pages Function（编译为 Worker）提供，在 Nginx/Apache 上并不存在，需要自行复刻，或者直接使用 Cloudflare。
 
@@ -35,10 +47,9 @@ npm run deploy    # 部署到 Cloudflare（npx wrangler deploy）
 
 即梦 免费api （智能绘图）申请地址： https://console.volcengine.com/ai/ability/detail/1
 
-### 免费小程序
-基于类似的功能，我已经完成一个不错的小程序，免费提供给大家使用。
-https://github.com/liangdabiao/perlerBeadsApplet
+## 微信小程序
 
+类似的功能，基于开源项目：https://github.com/liangdabiao/perlerBeadsApplet
 
 ## 文档导航
 
@@ -52,68 +63,30 @@ https://github.com/liangdabiao/perlerBeadsApplet
 
 ## 展示案例
 
-核心就是： ai制作图纸  ，关键就是颜色尽可能少，颗粒尽可能少，各种各样图纸风格都兼容，同时表达尽可能清楚，这就是我的ai能够做到。
+核心就是：ai 制作图纸，关键就是颜色尽可能少、颗粒尽可能少，各种图纸风格都兼容，同时表达尽可能清楚，这就是 AI 能够做到的。
 
-![展示图-1](docs/images/展示图-1.png)
-![展示图-2](docs/images/展示图-2.png)
-![展示图-3](docs/images/展示图-3.png)
-![展示图-4](docs/images/展示图-4.png)
-![展示图-5](docs/images/展示图-5.png)
-![展示图-6](docs/images/展示图-6.png)
-![展示图-7](docs/images/展示图-7.png)
+<details>
+<summary><b>📸 展开查看 7 张图纸实例</b>（缩略图，点击可查看原图）</summary>
+<br>
+<a href="docs/images/展示图-1.png"><img src="docs/images/thumbs/展示图-1.png" width="250" alt="展示图-1"></a>
+<a href="docs/images/展示图-2.png"><img src="docs/images/thumbs/展示图-2.png" width="250" alt="展示图-2"></a>
+<a href="docs/images/展示图-3.png"><img src="docs/images/thumbs/展示图-3.png" width="250" alt="展示图-3"></a>
+<a href="docs/images/展示图-4.png"><img src="docs/images/thumbs/展示图-4.png" width="250" alt="展示图-4"></a>
+<a href="docs/images/展示图-5.png"><img src="docs/images/thumbs/展示图-5.png" width="250" alt="展示图-5"></a>
+<a href="docs/images/展示图-6.png"><img src="docs/images/thumbs/展示图-6.png" width="250" alt="展示图-6"></a>
+<a href="docs/images/展示图-7.png"><img src="docs/images/thumbs/展示图-7.png" width="250" alt="展示图-7"></a>
+</details>
 
+## ❓ 想解决的（市场上拼豆软件的）问题
 
+以下是市场上拼豆软件普遍存在的问题，下面的「功能特点」逐条给出了本项目的做法：
 
- 
-❓
-想解决的（市场上拼豆软件的）问题：
 1. 颜色识别不准确，
 2. 灰色毛状边界线，
 3. 无法自适应合并同色系的颜色，
 4. 手动着色困难，无法精准选择颜色，
 5. 无法给出采购清单，
 6. 限制图片的导出和打印。
-
-💯
-目前（网站上的）功能：
-1.  生成底稿，
-2.  对应多种色号系统（MARD、COCO、漫漫、盼盼、咪小窝），
-3.  多种解析风格选择（池化逻辑），
-4.  自动合并邻近相似颜色，
-5.  统计每个颜色/一共有多少粒，
-6.  半自动去除杂色，
-7.  细节部分的手动着色（或修改），
-8.  橡皮擦功能，
-9.  颜色替换功能，
-10. 自定义调色板编辑器，
-11. 悬浮调色盘和工具栏，
-12. 放大镜工具，
-13. 图片裁剪功能，
-14. AI优化功能，
-15. 导出图纸（支持多种格式和设置），
-16. 导出采购清单（支持CSV格式），
-17. 专心拼豆模式，
-18. 一键去背景。
-
-❤️ 如果有需求可以直接提，我集成在网站里。
-
-✅
-对于商家，我把算法的改进思路放在这里，
-希望你们可以越做越好。
-如果有其他想二开的同学，可以直接在项目提交pr，
-这个思路也可以直接使用̋(ˊ•͈ꇴ•͈ˋ)
-
-### 1️⃣ 初始颜色映射
-黑色毛边是因为池化过程中对RGB 采用了 mean 操作，改为局部  max pooling ，每个单元，找到像素频率最高的 RGB 值，用欧氏距离查找最近的颜色就行
-
-### 2️⃣ 区域颜色合并
-杂色问题的产生，是因为没有进行颜色合并操作，需要从未访问单元格开始，使用BFS 查找欧氏距离小于阈值的邻近单元格，形成区域。将整个区域统一设置为该区域内出现次数最多的色号对应的颜色即可。
-
-### 3️⃣ 背景移除
-无法进行拼豆数量统计的原因，是没有进行背景移除操作：先定义背景色号列表。从图像所有边界单元格开始执行洪水填充。将所有与边界连通且颜色属于背景色号列表的单元格标记为"外部"。统计和下载时将忽略这些"外部"单元格即可。
-
-### 4️⃣ 颜色排除与重映射
-这是杂色自动去除仍不干净的情况下的附加功能，首先确定图像处理后最初包含的所有已存在颜色。重映射时，仅在已存在颜色中排除和其他已排除颜色的子集里寻找替换色。
 
 ## 功能特点
 
@@ -169,6 +142,51 @@ https://github.com/liangdabiao/perlerBeadsApplet
 *   **本地存储**: 使用 `localStorage` 存储用户的调色板选择和设置。
 *   **颜色系统**: 支持多种色号系统的映射和转换。
 
+### 核心算法：像素化、颜色映射与优化
+
+应用程序的核心是将图像转换为像素网格，并将颜色精确映射到有限的拼豆调色板，同时进行平滑和背景处理。
+
+1.  **图像加载与网格划分**:
+    *   加载用户上传的图片。
+    *   根据用户选择的"粒度"(`granularity`, N) 和原图宽高比确定 `N x M` 的网格尺寸。
+
+2.  **初始颜色映射 (基于主导色)**:
+    *   *为什么这样做*：早期做法是对单元内 RGB 取 **mean（均值）**，池化后图形边缘会出现**黑色毛边**；改为局部 **max pooling**（即取出现频率最高的 RGB 值）即可消除。
+    *   遍历 `N x M` 网格。
+    *   对每个单元格，在原图对应区域内找出出现频率最高的**像素 RGB 值 (Dominant Color)**（忽略透明/半透明像素）。
+    *   使用**欧氏距离**在 RGB 空间中，将该主导色映射到**当前选定且未被排除**的调色板 (`activeBeadPalette`) 中最接近的颜色。
+    *   记录每个单元格的初始映射色号和颜色 (`initialMappedData`)。
+
+3.  **区域颜色合并 (基于相似度)**:
+    *   *为什么这样做*：不做合并，同一色系内会残留大量**杂色**（这一步对应的就是"自动合并邻近相似颜色"）。
+    *   使用**广度优先搜索 (BFS)** 遍历 `initialMappedData`。
+    *   识别颜色相似（欧氏距离小于 `similarityThreshold`）的**连通区域**。
+    *   找出每个区域内出现次数最多的**珠子色号**。
+    *   将该区域内所有单元格统一设置为这个主导色号对应的颜色，得到初步平滑结果 (`mergedData`)。
+
+4.  **背景移除 (基于边界填充)**:
+    *   *为什么这样做*：不区分内外背景，**拼豆粒数统计会偏多**；统计图与带 Key 图纸只统计非"外部"的单元格。
+    *   定义一组背景色号 (`BACKGROUND_COLOR_KEYS`, 如 T1, H1)。
+    *   从 `mergedData` 的**所有边界单元格**开始，使用**洪水填充 (Flood Fill)** 算法。
+    *   标记所有从边界开始、颜色属于 `BACKGROUND_COLOR_KEYS` 且相互连通的单元格为"外部背景" (`isExternal = true`)。
+
+5.  **颜色排除与重映射**:
+    *   这是"杂色自动去除后仍不干净"时的**附加功能**。
+    *   当用户排除某个颜色 `key` 时：
+        *   确定一个**重映射目标调色板**：包含网格中**最初存在**的、且**当前未被排除**的所有颜色。
+        *   如果目标调色板为空（表示排除此颜色会导致没有有效颜色可用），则阻止排除。
+        *   否则，将 `mappedPixelData` 中所有使用 `key` 的非外部单元格，重新映射到目标调色板中的**最近似**颜色。
+    *   当用户恢复颜色时，触发完整的图像重新处理流程（步骤 1-4）。
+
+6.  **生成预览图与下载文件**:
+    *   **预览图**: 在 Canvas 上绘制 `mergedData`，根据 `isExternal` 状态区分内部颜色和外部背景（浅灰），并添加网格线。支持悬停/长按显示色号。
+    *   **带 Key 图纸下载**: 创建临时 Canvas，绘制 `mergedData` 中非外部背景的单元格，填充颜色、绘制边框，并在中央标注颜色 Key。
+    *   **统计图下载**: 统计 `mergedData` 中非外部背景单元格的各色号数量，生成包含色块、色号、数量的列表式 PNG 图片。
+
+### 调色板数据
+
+预设的拼豆调色板数据定义在 `src/app/colorSystemMapping.json` 文件中，该文件包含 291 种颜色的 hex 值到各个色号系统（MARD、COCO、漫漫、盼盼、咪小窝）的映射关系。用户实际可用的色板由"管理色板"中的逐色选择（`customPaletteSelections`，持久化在 `localStorage`）决定；默认选择逻辑见 `src/app/page.tsx` 的 `getDefaultPaletteSelections()`（排除 P/Q/R/T/Y/ZG 系列）。
+
 ## AI功能详解
 
 ### 功能原理
@@ -205,7 +223,7 @@ AI功能基于火山引擎的即梦AI (Jimeng AI) 模型，通过以下步骤实
 
 1.  **上传图片**: 用户上传需要优化的图片。
 2.  **打开AI优化弹窗**: 点击AI优化按钮，打开优化设置弹窗。
-3.  **配置参数**: 
+3.  **配置参数**:
     - 可选择使用默认提示词或输入自定义提示词。
     - 点击"开始优化"按钮。
 4.  **等待处理**: 系统显示处理进度，用户需要等待AI生成完成。
@@ -218,7 +236,7 @@ AI功能基于火山引擎的即梦AI (Jimeng AI) 模型，通过以下步骤实
 3.  **背景处理**: 自动将复杂背景替换为白色，减少拼豆数量和复杂度。
 4.  **创意增强**: 通过自定义提示词，用户可以尝试不同的艺术风格和效果。
 
-### 技术实现
+### 相关文件
 
 AI功能的实现涉及以下文件：
 
@@ -241,94 +259,6 @@ AI功能的实现涉及以下文件：
 2.  **处理时间**: AI生成需要一定时间（通常1-2分钟），请耐心等待。
 3.  **网络连接**: 需要稳定的网络连接以确保API调用成功。
 4.  **API限制**: 基于火山引擎API的使用限制，可能存在调用频率限制。
-
-### 核心算法：像素化、颜色映射与优化
-
-应用程序的核心是将图像转换为像素网格，并将颜色精确映射到有限的拼豆调色板，同时进行平滑和背景处理。
-
-1.  **图像加载与网格划分**:
-    *   加载用户上传的图片。
-    *   根据用户选择的"粒度"(`granularity`, N) 和原图宽高比确定 `N x M` 的网格尺寸。
-
-2.  **初始颜色映射 (基于主导色)**:
-    *   遍历 `N x M` 网格。
-    *   对每个单元格，在原图对应区域内找出出现频率最高的**像素 RGB 值 (Dominant Color)**（忽略透明/半透明像素）。
-    *   使用**欧氏距离**在 RGB 空间中，将该主导色映射到**当前选定且未被排除**的调色板 (`activeBeadPalette`) 中最接近的颜色。
-    *   记录每个单元格的初始映射色号和颜色 (`initialMappedData`)。
-
-3.  **区域颜色合并 (基于相似度)**:
-    *   使用**广度优先搜索 (BFS)** 遍历 `initialMappedData`。
-    *   识别颜色相似（欧氏距离小于 `similarityThreshold`）的**连通区域**。
-    *   找出每个区域内出现次数最多的**珠子色号**。
-    *   将该区域内所有单元格统一设置为这个主导色号对应的颜色，得到初步平滑结果 (`mergedData`)。
-
-4.  **背景移除 (基于边界填充)**:
-    *   定义一组背景色号 (`BACKGROUND_COLOR_KEYS`, 如 T1, H1)。
-    *   从 `mergedData` 的**所有边界单元格**开始，使用**洪水填充 (Flood Fill)** 算法。
-    *   标记所有从边界开始、颜色属于 `BACKGROUND_COLOR_KEYS` 且相互连通的单元格为"外部背景" (`isExternal = true`)。
-
-5.  **颜色排除与重映射**:
-    *   当用户排除某个颜色 `key` 时：
-        *   确定一个**重映射目标调色板**：包含网格中**最初存在**的、且**当前未被排除**的所有颜色。
-        *   如果目标调色板为空（表示排除此颜色会导致没有有效颜色可用），则阻止排除。
-        *   否则，将 `mappedPixelData` 中所有使用 `key` 的非外部单元格，重新映射到目标调色板中的**最近似**颜色。
-    *   当用户恢复颜色时，触发完整的图像重新处理流程（步骤 1-4）。
-
-6.  **生成预览图与下载文件**:
-    *   **预览图**: 在 Canvas 上绘制 `mergedData`，根据 `isExternal` 状态区分内部颜色和外部背景（浅灰），并添加网格线。支持悬停/长按显示色号。
-    *   **带 Key 图纸下载**: 创建临时 Canvas，绘制 `mergedData` 中非外部背景的单元格，填充颜色、绘制边框，并在中央标注颜色 Key。
-    *   **统计图下载**: 统计 `mergedData` 中非外部背景单元格的各色号数量，生成包含色块、色号、数量的列表式 PNG 图片。
-
-### 调色板数据
-
-预设的拼豆调色板数据定义在 `src/app/colorSystemMapping.json` 文件中，该文件包含 291 种颜色的 hex 值到各个色号系统（MARD、COCO、漫漫、盼盼、咪小窝）的映射关系。用户实际可用的色板由"管理色板"中的逐色选择（`customPaletteSelections`，持久化在 `localStorage`）决定；默认选择逻辑见 `src/app/page.tsx` 的 `getDefaultPaletteSelections()`（排除 P/Q/R/T/Y/ZG 系列）。
-
-## 本地开发
-
-1.  克隆项目:
-    ```bash
-    git clone https://github.com/liangdabiao/perler-beads-ai.git
-    cd perler-beads-ai
-    ```
-2.  安装依赖:
-    ```bash
-    npm install
-    # or yarn install or pnpm install
-    ```
-3.  启动开发服务器:
-    ```bash
-    npm run dev
-    # or yarn dev or pnpm dev
-    ```
-4.  在浏览器中打开 `http://localhost:3000`。
-
----
-
-## 部署到 Cloudflare（推荐）
-
-本项目采用 **Next.js 静态导出 + Cloudflare Pages Function（编译为 Worker）** 架构：所有重计算（图像像素化、颜色映射）都在浏览器端完成，服务端仅有一个轻量的 AI 代理接口，免费额度完全够用。
-
-```bash
-npm install
-npm run build     # 构建静态文件到 out/，并把 functions/ 编译成 out/_worker.js/
-npm run deploy    # 部署到 Cloudflare
-```
-
-不使用 AI 优化功能时，连服务端环境变量都不需要配置。
-
-> 新版 Cloudflare 面板不再有「Build output directory」输入框：静态目录写在仓库的 `wrangler.jsonc` 里，面板的 Deploy command 用 `npx wrangler deploy`。
-
-完整的部署步骤（从零注册 Cloudflare、Wrangler 命令行部署、连接 GitHub 自动部署、环境变量、Preview Deployment、自定义域名、常见问题）见 **[Cloudflare 部署指南](docs/部署/Cloudflare部署指南.md)**。
-
-### 常用命令速查
-
-| 命令 | 说明 |
-|------|------|
-| `npm run dev` | 本地开发（Next.js 开发服务器，**不含** AI 接口） |
-| `npm run build` | `next build` + 编译 `functions/` 为 Worker + 生成 `out/.assetsignore` |
-| `npm run preview` | 本地预览完整环境（`npm run build` + `wrangler dev`，含 AI 接口） |
-| `npm run deploy` | 部署到 Cloudflare（需先 build） |
-| `npx wrangler deploy --dry-run` | 只校验部署配置，不上传 |
 
 ## 许可证
 
