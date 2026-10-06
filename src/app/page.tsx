@@ -105,7 +105,7 @@ import FloatingToolbar from '../components/FloatingToolbar';
 import MagnifierTool from '../components/MagnifierTool';
 import MagnifierSelectionOverlay from '../components/MagnifierSelectionOverlay';
 import { loadPaletteSelections, savePaletteSelections, presetToSelections, PaletteSelections } from '../utils/localStorageUtils';
-import { TRANSPARENT_KEY, transparentColorData } from '../utils/pixelEditingUtils';
+import { TRANSPARENT_KEY, transparentColorData, recalculateColorStats } from '../utils/pixelEditingUtils';
 
 // 1. 导入新的 DonationModal 组件
 import DonationModal from '../components/DonationModal';
@@ -117,6 +117,11 @@ export default function Home() {
   const [originalImageSrc, setOriginalImageSrc] = useState<string | null>(null);
   const [granularity, setGranularity] = useState<number>(50);
   const [granularityInput, setGranularityInput] = useState<string>("50");
+  // 新增：纵轴切割数量（null 表示新图片的默认自动计算：横纵较大者为50）
+  const [verticalGranularity, setVerticalGranularity] = useState<number | null>(null);
+  const [verticalGranularityInput, setVerticalGranularityInput] = useState<string>("");
+  // 新增：保持长宽比开关（默认开启），开启时横纵轴切割数量联动修改
+  const [maintainAspectRatio, setMaintainAspectRatio] = useState<boolean>(true);
   const [similarityThreshold, setSimilarityThreshold] = useState<number>(30);
   const [similarityThresholdInput, setSimilarityThresholdInput] = useState<string>("30");
   // 添加像素化模式状态
@@ -125,7 +130,7 @@ export default function Home() {
   // 新增：色号系统选择状态
   const [selectedColorSystem, setSelectedColorSystem] = useState<ColorSystem>('MARD');
   // 新增：色号系统折叠状态
-  const [isColorSystemCollapsed, setIsColorSystemCollapsed] = useState<boolean>(true);
+  const [isColorSystemCollapsed, setIsColorSystemCollapsed] = useState<boolean>(false); // 默认展开
   
   const [activeBeadPalette, setActiveBeadPalette] = useState<PaletteColor[]>(() => {
       return fullBeadPalette; // 默认使用全部颜色
@@ -139,6 +144,11 @@ export default function Home() {
   const [gridDimensions, setGridDimensions] = useState<{ N: number; M: number } | null>(null);
   const [colorCounts, setColorCounts] = useState<{ [key: string]: { count: number; color: string } } | null>(null);
   const [totalBeadCount, setTotalBeadCount] = useState<number>(0);
+  // 一键去背景的撤销记录：只记录被改成透明的格子及其原始数据，撤销时精确还原
+  const [backgroundRemovalUndo, setBackgroundRemovalUndo] = useState<{
+    grid: { N: number; M: number };
+    changedCells: { row: number; col: number; original: MappedPixel }[];
+  } | null>(null);
   const [tooltipData, setTooltipData] = useState<{ x: number, y: number, key: string, color: string } | null>(null);
   const [remapTrigger, setRemapTrigger] = useState<number>(0);
   const [isManualColoringMode, setIsManualColoringMode] = useState<boolean>(false);
@@ -284,6 +294,10 @@ export default function Home() {
   const originalCanvasRef = useRef<HTMLCanvasElement>(null);
   const pixelatedCanvasRef = useRef<HTMLCanvasElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  // 新增：当前图片宽高比（img.height / img.width），用于横纵轴切割数量联动计算
+  const imgAspectRatioRef = useRef<number>(1);
+  // 新增：新图片标志——为 true 时按"横纵较大者为50"计算默认切割数量
+  const autoDefaultDimensionsRef = useRef<boolean>(true);
   // ++ 添加: Ref for import file input ++
   const importPaletteInputRef = useRef<HTMLInputElement>(null);
   //const longPressTimerRef = useRef<NodeJS.Timeout | null>(null);
@@ -619,6 +633,10 @@ export default function Home() {
           // 设置格子数量为导入的尺寸，避免重新映射时尺寸被修改
           setGranularity(gridDimensions.N);
           setGranularityInput(gridDimensions.N.toString());
+          // 新增：同步纵轴切割数量为导入的尺寸
+          setVerticalGranularity(gridDimensions.M);
+          setVerticalGranularityInput(gridDimensions.M.toString());
+          autoDefaultDimensionsRef.current = false;
           
           alert(`成功导入CSV文件！图纸尺寸：${gridDimensions.N}x${gridDimensions.M}，共使用${Object.keys(colorCountsMap).length}种颜色。`);
         })
@@ -648,6 +666,7 @@ export default function Home() {
   // 处理裁剪确认
   const handleCropConfirm = (croppedImageSrc: string) => {
     setOriginalImageSrc(croppedImageSrc);
+    setBackgroundRemovalUndo(null);
     setMappedPixelData(null);
     setGridDimensions(null);
     setColorCounts(null);
@@ -657,6 +676,11 @@ export default function Home() {
     const defaultGranularity = 50;
     setGranularity(defaultGranularity);
     setGranularityInput(defaultGranularity.toString());
+    // 新增：重置纵轴切割数量为自动模式（首次处理时按"横纵较大者为50"计算默认值）
+    setVerticalGranularity(null);
+    setVerticalGranularityInput("");
+    setMaintainAspectRatio(true);
+    autoDefaultDimensionsRef.current = true;
     setRemapTrigger(prev => prev + 1); // Trigger full remap for new image
     
     // 关闭裁剪弹窗
@@ -695,6 +719,12 @@ export default function Home() {
   const handleAIOptimized = (optimizedImageSrc: string) => {
     // 使用优化后的图片替换原图，并重新处理
     setOriginalImageSrc(optimizedImageSrc);
+    setBackgroundRemovalUndo(null);
+    // 新增：优化后图片宽高比可能变化，保持长宽比时按新比例重算纵轴切割数量
+    if (maintainAspectRatio) {
+      setVerticalGranularity(null);
+      setVerticalGranularityInput("");
+    }
     setMappedPixelData(null);
     setGridDimensions(null);
     setColorCounts(null);
@@ -731,9 +761,50 @@ export default function Home() {
     }
   };
 
-  // ++ 新增：处理输入框变化的函数 ++
+  // ++ 新增：处理横轴切割数量输入框变化的函数（保持长宽比时联动修改纵轴输入框；预览图在点击"应用数字"后才更新）++
   const handleGranularityInputChange = (event: ChangeEvent<HTMLInputElement>) => {
-    setGranularityInput(event.target.value);
+    const raw = event.target.value;
+    setGranularityInput(raw);
+    const parsed = parseInt(raw, 10);
+    if (isNaN(parsed)) return;
+    const minN = 10;
+    const maxN = 300;
+    const clampedN = Math.min(maxN, Math.max(minN, parsed));
+    if (maintainAspectRatio) {
+      // 联动：由横轴数量和图片宽高比重算纵轴数量（仅同步输入框，不触发预览更新）
+      const newM = Math.min(300, Math.max(1, Math.round(clampedN * imgAspectRatioRef.current)));
+      setVerticalGranularityInput(newM.toString());
+    }
+  };
+
+  // 新增：处理纵轴切割数量输入框变化的函数（保持长宽比时联动修改横轴输入框；预览图在点击"应用数字"后才更新）
+  const handleVerticalGranularityInputChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const raw = event.target.value;
+    setVerticalGranularityInput(raw);
+    const parsed = parseInt(raw, 10);
+    if (isNaN(parsed)) return;
+    const minM = 1;
+    const maxM = 300;
+    const clampedM = Math.min(maxM, Math.max(minM, parsed));
+    if (maintainAspectRatio) {
+      // 联动：由纵轴数量和图片宽高比重算横轴数量（仅同步输入框，不触发预览更新）
+      const newN = Math.min(300, Math.max(10, Math.round(clampedM / imgAspectRatioRef.current)));
+      setGranularityInput(newN.toString());
+    }
+  };
+
+  // 新增：处理"保持长宽比"开关变化（开启时按当前横轴输入值和图片宽高比联动纵轴输入框）
+  const handleMaintainAspectRatioChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const checked = event.target.checked;
+    setMaintainAspectRatio(checked);
+    if (checked) {
+      const parsedN = parseInt(granularityInput, 10);
+      const baseN = isNaN(parsedN)
+        ? Math.min(300, Math.max(10, granularity))
+        : Math.min(300, Math.max(10, parsedN));
+      const newM = Math.min(300, Math.max(1, Math.round(baseN * imgAspectRatioRef.current)));
+      setVerticalGranularityInput(newM.toString());
+    }
   };
 
   // ++ 添加：处理相似度输入框变化的函数 ++
@@ -765,13 +836,32 @@ export default function Home() {
       newSimilarity = maxSimilarity;
     }
 
+    // 处理纵轴切割数量
+    let newVertical: number;
+    if (maintainAspectRatio) {
+      newVertical = Math.min(300, Math.max(1, Math.round(newGranularity * imgAspectRatioRef.current)));
+    } else {
+      const parsedV = parseInt(verticalGranularityInput, 10);
+      if (isNaN(parsedV)) {
+        newVertical = verticalGranularity ?? Math.max(1, Math.round(newGranularity * imgAspectRatioRef.current));
+      } else {
+        newVertical = Math.min(300, Math.max(1, parsedV));
+      }
+    }
+
     // 检查值是否有变化
     const granularityChanged = newGranularity !== granularity;
+    const verticalChanged = newVertical !== verticalGranularity;
     const similarityChanged = newSimilarity !== similarityThreshold;
     
     if (granularityChanged) {
       console.log(`Confirming new granularity: ${newGranularity}`);
       setGranularity(newGranularity);
+    }
+    
+    if (verticalChanged) {
+      console.log(`Confirming new vertical granularity: ${newVertical}`);
+      setVerticalGranularity(newVertical);
     }
     
     if (similarityChanged) {
@@ -780,7 +870,7 @@ export default function Home() {
     }
     
     // 只有在有值变化时才触发重映射
-    if (granularityChanged || similarityChanged) {
+    if (granularityChanged || verticalChanged || similarityChanged) {
       setRemapTrigger(prev => prev + 1);
       // 退出手动上色模式
       setIsManualColoringMode(false);
@@ -789,6 +879,7 @@ export default function Home() {
 
     // 始终同步输入框的值
     setGranularityInput(newGranularity.toString());
+    setVerticalGranularityInput(newVertical.toString());
     setSimilarityThresholdInput(newSimilarity.toString());
   };
 
@@ -805,8 +896,8 @@ export default function Home() {
     }
   };
 
-  // 修改pixelateImage函数接收模式参数
-  const pixelateImage = (imageSrc: string, detailLevel: number, threshold: number, currentPalette: PaletteColor[], mode: PixelationMode) => {
+  // 修改pixelateImage函数接收模式参数；targetM 为显式纵轴切割数量（null 表示按图片宽高比自动计算）
+  const pixelateImage = (imageSrc: string, detailLevel: number, threshold: number, currentPalette: PaletteColor[], mode: PixelationMode, targetM?: number | null) => {
     console.log(`Attempting to pixelate with detail: ${detailLevel}, threshold: ${threshold}, mode: ${mode}`);
     const originalCanvas = originalCanvasRef.current;
     const pixelatedCanvas = pixelatedCanvasRef.current;
@@ -824,6 +915,7 @@ export default function Home() {
         pixelatedCtx.clearRect(0, 0, pixelatedCanvas.width, pixelatedCanvas.height);
         setMappedPixelData(null);
         setGridDimensions(null);
+        setBackgroundRemovalUndo(null);
         // Keep colorCounts potentially showing the last valid counts? Or clear them too?
         // setColorCounts(null); // Decide if clearing counts is desired when palette is empty
         // setTotalBeadCount(0);
@@ -839,6 +931,7 @@ export default function Home() {
     img.onerror = (error: Event | string) => {
       console.error("Image loading failed:", error); 
       alert("无法加载图片。");
+      setBackgroundRemovalUndo(null);
       setOriginalImageSrc(null); 
       setMappedPixelData(null); 
       setGridDimensions(null); 
@@ -849,8 +942,35 @@ export default function Home() {
     img.onload = () => {
       console.log("Image loaded successfully.");
       const aspectRatio = img.height / img.width;
-      const N = detailLevel;
-      const M = Math.max(1, Math.round(N * aspectRatio));
+      imgAspectRatioRef.current = aspectRatio;
+      let N = detailLevel;
+      let M: number;
+      if (targetM != null && targetM >= 1) {
+        // 显式纵轴切割数量（用户手动设置或CSV导入）
+        M = targetM;
+      } else if (autoDefaultDimensionsRef.current) {
+        // 新图片默认：横纵轴切割数量中较大者为50
+        if (aspectRatio >= 1) {
+          M = 50;
+          N = Math.max(1, Math.round(50 / aspectRatio));
+        } else {
+          N = 50;
+          M = Math.max(1, Math.round(50 * aspectRatio));
+        }
+        autoDefaultDimensionsRef.current = false;
+        // 同步UI状态（N 可能因默认值计算而变化）
+        if (N !== detailLevel) {
+          setGranularity(N);
+          setGranularityInput(N.toString());
+        }
+        setVerticalGranularity(M);
+        setVerticalGranularityInput(M.toString());
+      } else {
+        // 按当前图片宽高比重算 M（例如AI优化后宽高比变化）
+        M = Math.max(1, Math.round(N * aspectRatio));
+        setVerticalGranularity(M);
+        setVerticalGranularityInput(M.toString());
+      }
       if (N <= 0 || M <= 0) { console.error("Invalid grid dimensions:", { N, M }); return; }
       console.log(`Grid size: ${N}x${M}`);
 
@@ -876,7 +996,8 @@ export default function Home() {
         console.log(`Large grid detected (${N} columns). Adjusted canvas width from ${baseWidth} to ${outputWidth}px (cell size: ${Math.round(outputWidth / N)}px)`);
       }
       
-      const outputHeight = Math.round(outputWidth * aspectRatio);
+      // 按实际网格宽高比（M/N）计算画布高度，保证格子为正方形（M 被显式修改时与图片比例解耦）
+      const outputHeight = Math.round(outputWidth * (M / N));
       
       // 在控制台提示用户画布尺寸变化
       if (N > 100) {
@@ -1006,6 +1127,8 @@ export default function Home() {
 
       // --- 绘制和状态更新 ---
       if (pixelatedCanvasRef.current) {
+        // 重新像素化会重建整张图，旧的去背景撤销记录不再适用
+        setBackgroundRemovalUndo(null);
         setMappedPixelData(mergedData);
         setGridDimensions({ N, M });
 
@@ -1045,7 +1168,7 @@ export default function Home() {
        const timeoutId = setTimeout(() => {
          if (originalImageSrc && originalCanvasRef.current && pixelatedCanvasRef.current && activeBeadPalette.length > 0) {
            console.log("useEffect triggered: Processing image due to src, granularity, threshold, palette selection, mode or remap trigger.");
-           pixelateImage(originalImageSrc, granularity, similarityThreshold, activeBeadPalette, pixelationMode);
+           pixelateImage(originalImageSrc, granularity, similarityThreshold, activeBeadPalette, pixelationMode, verticalGranularity);
          } else {
             console.warn("useEffect check failed inside timeout: Refs or active palette not ready/empty.");
          }
@@ -1065,12 +1188,13 @@ export default function Home() {
         }
         setMappedPixelData(null);
         setGridDimensions(null);
+        setBackgroundRemovalUndo(null);
         // Keep colorCounts to allow user to un-exclude colors
         // setColorCounts(null);
         // setTotalBeadCount(0);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [originalImageSrc, granularity, similarityThreshold, customPaletteSelections, pixelationMode, remapTrigger]);
+  }, [originalImageSrc, granularity, similarityThreshold, customPaletteSelections, pixelationMode, remapTrigger, verticalGranularity]);
 
   // 确保文件输入框引用在组件挂载后正确设置
   useEffect(() => {
@@ -1325,6 +1449,8 @@ export default function Home() {
     const newPixelData = mappedPixelData.map(row => row.map(cell => ({ ...cell })));
     const visited = Array(M).fill(null).map(() => Array(N).fill(false));
     const stack: { row: number; col: number }[] = [];
+    // 记录本次被改成透明的格子及其原始数据，供"撤销去背景"精确还原
+    const changedCells: { row: number; col: number; original: MappedPixel }[] = [];
 
     const pushIfTarget = (row: number, col: number) => {
       if (row < 0 || row >= M || col < 0 || col >= N || visited[row][col]) {
@@ -1352,6 +1478,7 @@ export default function Home() {
 
     while (stack.length > 0) {
       const { row, col } = stack.pop()!;
+      changedCells.push({ row, col, original: newPixelData[row][col] });
       newPixelData[row][col] = { ...transparentColorData };
       pushIfTarget(row - 1, col);
       pushIfTarget(row + 1, col);
@@ -1361,25 +1488,42 @@ export default function Home() {
 
     setMappedPixelData(newPixelData);
 
-    const newColorCounts: { [hexKey: string]: { count: number; color: string } } = {};
-    let newTotalCount = 0;
-    newPixelData.flat().forEach(cell => {
-      if (cell && !cell.isExternal && cell.key !== TRANSPARENT_KEY) {
-        const cellHex = cell.color.toUpperCase();
-        if (!newColorCounts[cellHex]) {
-          newColorCounts[cellHex] = {
-            count: 0,
-            color: cellHex
-          };
-        }
-        newColorCounts[cellHex].count++;
-        newTotalCount++;
-      }
-    });
+    const { colorCounts: newColorCounts, totalCount: newTotalCount } = recalculateColorStats(newPixelData);
 
     setColorCounts(newColorCounts);
     setTotalBeadCount(newTotalCount);
     setInitialGridColorKeys(new Set(Object.keys(newColorCounts)));
+    // 只有真正去除了格子才留下可撤销记录（覆盖上一次记录，仅保留最近一次）
+    setBackgroundRemovalUndo({ grid: { N, M }, changedCells });
+  };
+
+  // 撤销一键去背景：把上次被去除的格子还原，并按当前像素数据重算统计
+  const handleUndoRemoveBackground = () => {
+    if (!backgroundRemovalUndo || !mappedPixelData || !gridDimensions) return;
+
+    const { N, M } = gridDimensions;
+    const { grid, changedCells } = backgroundRemovalUndo;
+
+    // 网格尺寸已变化（重新像素化等），旧坐标不再有效，直接丢弃记录
+    if (grid.N !== N || grid.M !== M) {
+      setBackgroundRemovalUndo(null);
+      return;
+    }
+
+    const newPixelData = mappedPixelData.map(row => row.map(cell => ({ ...cell })));
+    changedCells.forEach(({ row, col, original }) => {
+      if (newPixelData[row]?.[col]) {
+        newPixelData[row][col] = { ...original };
+      }
+    });
+
+    setMappedPixelData(newPixelData);
+
+    const { colorCounts: newColorCounts, totalCount: newTotalCount } = recalculateColorStats(newPixelData);
+    setColorCounts(newColorCounts);
+    setTotalBeadCount(newTotalCount);
+    setInitialGridColorKeys(new Set(Object.keys(newColorCounts)));
+    setBackgroundRemovalUndo(null);
   };
 
   // --- Tooltip Logic ---
@@ -2136,7 +2280,7 @@ export default function Home() {
             {/* ++ HIDE Control Row in manual mode ++ */}
             {!isManualColoringMode && (
               /* 修改控制面板网格布局 */
-              <div className="w-full md:max-w-2xl grid grid-cols-1 sm:grid-cols-2 gap-4 bg-white dark:bg-gray-800 p-4 sm:p-5 rounded-xl shadow-md border border-gray-100 dark:border-gray-700">
+              <div className="w-full md:max-w-2xl grid grid-cols-1 sm:grid-cols-3 gap-4 bg-white dark:bg-gray-800 p-4 sm:p-5 rounded-xl shadow-md border border-gray-100 dark:border-gray-700">
                 {/* Granularity Input */}
                 <div className="flex-1">
                   {/* Label color */}
@@ -2157,7 +2301,43 @@ export default function Home() {
                   </div>
                 </div>
 
-                {/* Similarity Threshold Input */}
+                {/* Vertical Granularity Input (newly added: vertical-axis cut count) */}
+                <div className="flex-1">
+                  <label htmlFor="verticalGranularityInput" className="block text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5 sm:mb-2">
+                    纵轴切割数量 (1-300):
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="number"
+                      id="verticalGranularityInput"
+                      value={verticalGranularityInput}
+                      onChange={handleVerticalGranularityInputChange}
+                      className="w-full p-1.5 border border-gray-300 dark:border-gray-600 rounded-md text-sm focus:ring-blue-500 focus:border-blue-500 h-9 shadow-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-200 placeholder-gray-400 dark:placeholder-gray-500"
+                      min="1"
+                      max="300"
+                    />
+                  </div>
+                </div>
+
+                {/* 保持长宽比开关（纵轴切割数量右侧，同一行） */}
+                <div className="flex flex-col justify-end pb-1">
+                  <label
+                    htmlFor="maintainAspectRatioCheckbox"
+                    className="flex items-center gap-1.5 text-xs sm:text-sm text-gray-700 dark:text-gray-300 cursor-pointer select-none"
+                    title="开启时修改横轴或纵轴切割数量会自动联动调整另一个值"
+                  >
+                    <input
+                      type="checkbox"
+                      id="maintainAspectRatioCheckbox"
+                      checked={maintainAspectRatio}
+                      onChange={handleMaintainAspectRatioChange}
+                      className="w-4 h-4 accent-blue-500"
+                    />
+                    保持长宽比
+                  </label>
+                </div>
+
+                {/* Similarity Threshold Input (另起一行) */}
                 <div className="flex-1">
                     {/* Label color */}
                     <label htmlFor="similarityThresholdInput" className="block text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5 sm:mb-2">
@@ -2178,7 +2358,7 @@ export default function Home() {
                 </div>
 
                 {/* 快捷按钮 */}
-                <div className="sm:col-span-2 flex flex-wrap items-center gap-2">
+                <div className="sm:col-span-3 flex flex-wrap items-center gap-2">
                   <button
                     onClick={handleConfirmParameters}
                     className="h-9 bg-blue-500 hover:bg-blue-600 text-white text-sm px-3 rounded-md whitespace-nowrap transition-colors duration-200 shadow-sm"
@@ -2202,10 +2382,21 @@ export default function Home() {
                   >
                     一键去背景
                   </button>
+                  <button
+                    onClick={handleUndoRemoveBackground}
+                    disabled={!backgroundRemovalUndo || !mappedPixelData || !gridDimensions}
+                    title="恢复到点击「一键去背景」之前的状态"
+                    className="inline-flex items-center justify-center h-9 px-3 text-sm rounded-md border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700/40 text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700/70 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
+                  >
+                    <svg className="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 15L3 9m0 0l6-6M3 9h12a6 6 0 010 12h-3" />
+                    </svg>
+                    撤销去背景
+                  </button>
                 </div>
 
                 {/* Pixelation Mode Selector */}
-                <div className="sm:col-span-2">
+                <div className="sm:col-span-3">
                   {/* Label color */}
                   <label htmlFor="pixelationModeSelect" className="block text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5 sm:mb-2">处理模式:</label>
                   <div className="flex items-center gap-2">
@@ -2223,7 +2414,7 @@ export default function Home() {
                 </div>
 
                 {/* 色号系统选择器 */}
-                <div className="sm:col-span-2">
+                <div className="sm:col-span-3">
                   <button
                     onClick={() => setIsColorSystemCollapsed(!isColorSystemCollapsed)}
                     className="flex items-center justify-between w-full text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5 sm:mb-2"

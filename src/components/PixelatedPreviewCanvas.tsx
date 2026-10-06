@@ -109,6 +109,8 @@ const PixelatedPreviewCanvas: React.FC<PixelatedPreviewCanvasProps> = ({
   const touchStartPosRef = useRef<{ x: number; y: number; pageX: number; pageY: number } | null>(null);
   const touchMovedRef = useRef<boolean>(false);
   const [isHighlighting, setIsHighlighting] = useState(false);
+  // 画布显示尺寸（用于对齐坐标轴标签）
+  const [displaySize, setDisplaySize] = useState<{ width: number; height: number } | null>(null);
 
   // Effect to detect dark mode changes and update state
   useEffect(() => {
@@ -133,6 +135,36 @@ const PixelatedPreviewCanvas: React.FC<PixelatedPreviewCanvasProps> = ({
     return () => observer.disconnect();
 
   }, [darkModeState]); // Depend on darkModeState to re-run if needed externally
+
+  // 监听画布显示尺寸，用于在预览图周围渲染对齐的横纵轴坐标标签
+  useEffect(() => {
+    const el = canvasRef.current;
+    if (!el) return;
+
+    let raf = 0;
+    const update = () => {
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(() => {
+        const rect = el.getBoundingClientRect();
+        setDisplaySize(prev => {
+          if (prev && Math.abs(prev.width - rect.width) < 0.5 && Math.abs(prev.height - rect.height) < 0.5) {
+            return prev;
+          }
+          return { width: rect.width, height: rect.height };
+        });
+      });
+    };
+
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(el);
+    window.addEventListener('resize', update);
+    return () => {
+      cancelAnimationFrame(raf);
+      observer.disconnect();
+      window.removeEventListener('resize', update);
+    };
+  }, [canvasRef, mappedPixelData, gridDimensions]);
 
   // Update useEffect for drawing to depend on darkModeState as well
   useEffect(() => {
@@ -236,24 +268,98 @@ const PixelatedPreviewCanvas: React.FC<PixelatedPreviewCanvasProps> = ({
     touchMovedRef.current = false;
   };
 
+  // 计算坐标轴标签：与下载图纸默认参数一致（gridInterval: 10，标注首尾 + 每 10 个）
+  const N = gridDimensions?.N ?? 0;
+  const M = gridDimensions?.M ?? 0;
+  const AXIS_LABEL_STEP = 10;
+  const columnStep = AXIS_LABEL_STEP;
+  const rowStep = AXIS_LABEL_STEP;
+
+  // 生成轴标签：标注第 1 个、每 step 个、以及最后一个（末尾过近时省略以免重叠）
+  const buildAxisLabels = (count: number, step: number): number[] => {
+    const labels: number[] = [];
+    for (let i = 0; i < count; i++) {
+      if (i === 0 || (i + 1) % step === 0) {
+        labels.push(i + 1);
+      }
+    }
+    if (count > 1 && count - (labels[labels.length - 1] ?? 0) > 1) {
+      labels.push(count);
+    }
+    return labels;
+  };
+  const columnLabels = buildAxisLabels(N, columnStep);
+  const rowLabels = buildAxisLabels(M, rowStep);
+
+  const labelCls = 'absolute font-mono leading-none text-[10px] text-gray-500 dark:text-gray-400 select-none pointer-events-none';
+
   return (
-    <canvas
-      ref={canvasRef}
-      onMouseMove={handleMouseMove}
-      onMouseLeave={handleMouseLeave}
-      onClick={handleClick}
-      onTouchStart={handleTouchStart}
-      onTouchMove={handleTouchMove}
-      onTouchEnd={handleTouchEnd}
-      onTouchCancel={handleTouchEnd} // 添加 onTouchCancel 以处理触摸中断的情况
-      className={`border border-gray-300 dark:border-gray-600 max-w-full h-auto rounded block ${
-        isManualColoringMode ? 'cursor-pointer' : 'cursor-grab' // 改为 grab 光标提示可以拖动
-      }`}
-      style={{
-        imageRendering: 'pixelated',
-        // touchAction: 'none' // 移除此行以允许页面滚动和缩放
-      }}
-    />
+    <div
+      className="relative inline-block align-middle max-w-full"
+      style={{ margin: '20px 8px 8px 28px' }}
+    >
+      {/* 顶部横轴坐标（列号） */}
+      {displaySize && N > 0 && (
+        <div
+          className="absolute left-0"
+          style={{ bottom: '100%', width: displaySize.width, height: 16 }}
+          aria-hidden
+        >
+          {columnLabels.map((col) => (
+            <span
+              key={col}
+              className={labelCls}
+              style={{
+                left: ((col - 0.5) * displaySize.width) / N,
+                top: 8,
+                transform: 'translate(-50%, -50%)',
+              }}
+            >
+              {col}
+            </span>
+          ))}
+        </div>
+      )}
+      {/* 左侧纵轴坐标（行号） */}
+      {displaySize && M > 0 && (
+        <div
+          className="absolute top-0"
+          style={{ right: '100%', width: 24, height: displaySize.height }}
+          aria-hidden
+        >
+          {rowLabels.map((row) => (
+            <span
+              key={row}
+              className={labelCls}
+              style={{
+                top: ((row - 0.5) * displaySize.height) / M,
+                left: 12,
+                transform: 'translate(-50%, -50%)',
+              }}
+            >
+              {row}
+            </span>
+          ))}
+        </div>
+      )}
+      <canvas
+        ref={canvasRef}
+        onMouseMove={handleMouseMove}
+        onMouseLeave={handleMouseLeave}
+        onClick={handleClick}
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
+        onTouchCancel={handleTouchEnd} // 添加 onTouchCancel 以处理触摸中断的情况
+        className={`border border-gray-300 dark:border-gray-600 max-w-full h-auto rounded block ${
+          isManualColoringMode ? 'cursor-pointer' : 'cursor-grab' // 改为 grab 光标提示可以拖动
+        }`}
+        style={{
+          imageRendering: 'pixelated',
+          // touchAction: 'none' // 移除此行以允许页面滚动和缩放
+        }}
+      />
+    </div>
   );
 };
 

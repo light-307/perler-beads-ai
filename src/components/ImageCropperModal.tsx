@@ -59,6 +59,19 @@ export default function ImageCropperModal({
     }
   }, [onConfirm]);
 
+  const handleSelectAll = () => {
+    const cropper = getCropper();
+    if (!cropper) return;
+    const canvasData = cropper.getCanvasData();
+    // setData 的 x/y/width/height 是自然像素坐标（内部会按缩放比例换算）
+    cropper.setData({
+      x: 0,
+      y: 0,
+      width: canvasData.naturalWidth,
+      height: canvasData.naturalHeight,
+    });
+  };
+
   const handleRotateLeft = () => {
     getCropper()?.rotate(-90);
   };
@@ -135,51 +148,67 @@ export default function ImageCropperModal({
         <div className="px-6 py-3 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50">
           <div className="flex flex-wrap items-center justify-center gap-2">
             <button
+              onClick={handleSelectAll}
+              className="flex flex-col items-center gap-1 px-2.5 py-1.5 rounded-lg bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors"
+              title="全选"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8V4h4M20 8V4h-4M4 16v4h4m12-4v4h-4" />
+              </svg>
+              <span className="text-xs leading-none text-gray-500 dark:text-gray-400">全选</span>
+            </button>
+            <div className="w-px h-8 bg-gray-300 dark:bg-gray-600 mx-1" />
+            <button
               onClick={handleRotateLeft}
-              className="p-2 rounded-lg bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors"
+              className="flex flex-col items-center gap-1 px-2.5 py-1.5 rounded-lg bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors"
               title="向左旋转"
             >
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
               </svg>
+              <span className="text-xs leading-none text-gray-500 dark:text-gray-400">向左旋转</span>
             </button>
             <button
               onClick={handleRotateRight}
-              className="p-2 rounded-lg bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors"
+              className="flex flex-col items-center gap-1 px-2.5 py-1.5 rounded-lg bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors"
               title="向右旋转"
             >
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 10h-10a8 8 0 00-8 8v2M21 10l-6 6m6-6l-6-6" />
               </svg>
+              <span className="text-xs leading-none text-gray-500 dark:text-gray-400">向右旋转</span>
             </button>
-            <div className="w-px h-6 bg-gray-300 dark:bg-gray-600 mx-1" />
+            <div className="w-px h-8 bg-gray-300 dark:bg-gray-600 mx-1" />
             <button
               onClick={handleFlipHorizontal}
-              className="p-2 rounded-lg bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors"
+              className="flex flex-col items-center gap-1 px-2.5 py-1.5 rounded-lg bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors"
               title="水平翻转"
             >
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
               </svg>
+              <span className="text-xs leading-none text-gray-500 dark:text-gray-400">水平翻转</span>
             </button>
             <button
               onClick={handleFlipVertical}
-              className="p-2 rounded-lg bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors"
+              className="flex flex-col items-center gap-1 px-2.5 py-1.5 rounded-lg bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors"
               title="垂直翻转"
             >
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" style={{ transform: 'rotate(90deg)' }}>
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
               </svg>
+              <span className="text-xs leading-none text-gray-500 dark:text-gray-400">垂直翻转</span>
             </button>
-            <div className="w-px h-6 bg-gray-300 dark:bg-gray-600 mx-1" />
+            <div className="w-px h-8 bg-gray-300 dark:bg-gray-600 mx-1" />
             <button
               onClick={handleReset}
-              className="p-2 rounded-lg bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors"
+              className="flex flex-col items-center gap-1 px-2.5 py-1.5 rounded-lg bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors"
               title="重置"
             >
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
               </svg>
+              <span className="text-xs leading-none text-gray-500 dark:text-gray-400">重置</span>
             </button>
           </div>
         </div>
