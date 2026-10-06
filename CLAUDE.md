@@ -67,4 +67,5 @@ npm run deploy       # 部署到 Cloudflare（需先 build）
 - `docs/功能/一键去背景.md` — 一键去背景功能实现
 - `docs/参考/即梦4.0接口文档.md` — 火山引擎即梦接口原始文档
 - `docs/规划/双端云保存待办.md` — 云端保存待办方案
-- `docs/images/` — README 展示图
+- `docs/images/` — README 展示图原图（体积极大，勿直接嵌入 README）
+- `docs/images/thumbs/` — 展示图缩略图（宽 480px，README「展示案例」实际引用的是这些，点击缩略图才打开原图）。更换展示图后需重新生成：按宽度 480 缩放并输出 256 色调色板 PNG（项目本身不依赖 sharp，属于一次性临时工具）
