@@ -10,6 +10,35 @@ const VOLC_API_SERVICE = 'cv';
 
 const encoder = new TextEncoder();
 
+// 服务端环境变量缺失/为空时抛出。
+// 不这样兜底的话，TextEncoder.encode(undefined) 会得到 0 字节，
+// 随后 crypto.subtle.importKey 会抛出 "Imported HMAC key length (0) must be a non-zero value ..."，
+// 用户完全看不懂问题出在哪。
+class ConfigError extends Error {}
+
+const REQUIRED_ENV_KEYS = ['VOLC_ACCESS_KEY_ID', 'VOLC_SECRET_ACCESS_KEY'] as const;
+
+// 读取并校验火山引擎密钥；顺手 trim，避免面板粘贴时带上的首尾空格/换行导致签名错误
+function getCredentials(env: Env): { accessKeyId: string; secretAccessKey: string } {
+  const values = {
+    accessKeyId: (env.VOLC_ACCESS_KEY_ID ?? '').trim(),
+    secretAccessKey: (env.VOLC_SECRET_ACCESS_KEY ?? '').trim(),
+  };
+
+  const missing = REQUIRED_ENV_KEYS.filter((key) => !(env[key] ?? '').trim());
+
+  if (missing.length > 0) {
+    throw new ConfigError(
+      `SERVER_NOT_CONFIGURED: 服务端没有读到环境变量 ${missing.join('、')}。` +
+        '请在 Cloudflare 控制台 → Workers & Pages → 本 Worker → Settings → Variables and Secrets 添加这两个变量' +
+        '（类型选 Secret，Production 与 Preview 都要填），保存后重新部署一次；' +
+        '本地联调请把密钥写入仓库根目录的 .dev.vars 后用 npm run preview。'
+    );
+  }
+
+  return values;
+}
+
 // 需要忽略的headers
 const HEADER_KEYS_TO_IGNORE = new Set([
   'authorization',
@@ -147,7 +176,7 @@ function getDateTimeNow(): string {
 
 // 提交任务到即梦AI
 async function submitTask(imageBase64: string, prompt: string, env: Env) {
-  const { VOLC_ACCESS_KEY_ID: accessKeyId, VOLC_SECRET_ACCESS_KEY: secretAccessKey } = env;
+  const { accessKeyId, secretAccessKey } = getCredentials(env);
 
   const base64Data = imageBase64.includes(',')
     ? imageBase64.split(',')[1]
@@ -231,7 +260,7 @@ async function submitTask(imageBase64: string, prompt: string, env: Env) {
 
 // 查询任务结果
 async function queryTask(taskId: string, env: Env) {
-  const { VOLC_ACCESS_KEY_ID: accessKeyId, VOLC_SECRET_ACCESS_KEY: secretAccessKey } = env;
+  const { accessKeyId, secretAccessKey } = getCredentials(env);
 
   const requestBody = {
     req_key: 'jimeng_t2i_v40',
@@ -381,6 +410,14 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
 
   } catch (error) {
     console.error('AI optimization error:', error);
+
+    if (error instanceof ConfigError) {
+      return Response.json(
+        { error: 'SERVER_NOT_CONFIGURED', message: error.message },
+        { status: 500 }
+      );
+    }
+
     return Response.json(
       {
         error: 'AI optimization failed',

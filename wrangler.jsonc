@@ -4,6 +4,13 @@
   "name": "perler-beads-ai",
   "compatibility_date": "2024-12-01",
 
+  // 环境变量只在 Cloudflare 面板的 Settings → Variables and Secrets 里维护（见 docs/部署/Cloudflare部署指南.md）。
+  // Wrangler 默认把配置文件当作唯一事实来源：keep_vars 缺省（false）时，每次 `wrangler deploy` 都会删掉面板上
+  // 添加的**明文**变量，运行时的 env.VOLC_* 就变成 undefined，AI 优化会报 HMAC key length (0) 之类的错。
+  // 这里显式开启，保证面板上配置的变量不会被部署流程覆盖。
+  // （类型为 Secret 的变量 Wrangler 始终不会删除，但误用明文类型时就会被删。）
+  "keep_vars": true,
+
   // next build（next.config.ts 里 output: "export"）导出的静态资源目录
   "assets": {
     "directory": "./out",
