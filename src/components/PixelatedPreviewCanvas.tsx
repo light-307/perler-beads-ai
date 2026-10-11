@@ -208,12 +208,9 @@ const PixelatedPreviewCanvas: React.FC<PixelatedPreviewCanvasProps> = ({
 
   // --- 鼠标事件处理 ---
   
-  // 鼠标移动时显示提示
+  // 鼠标移动时显示提示（两种模式都触发；手动模式下悬停仅显示色号，点击仍走上色逻辑）
   const handleMouseMove = (event: MouseEvent<HTMLCanvasElement>) => {
-    // 只有在非手动模式下才通过mousemove显示tooltip，避免干扰手动上色
-    if (!isManualColoringMode) {
-        onInteraction(event.clientX, event.clientY, event.pageX, event.pageY, false);
-    }
+    onInteraction(event.clientX, event.clientY, event.pageX, event.pageY, false);
   };
 
   // 鼠标离开时隐藏提示

@@ -1675,9 +1675,10 @@ export default function Home() {
         console.log(`State updated after ${isExcluding ? 'exclusion' : 'restore'} of ${hexKey}.`);
         console.log("---------");
 
-        // ++ Exit manual mode if colors are excluded/included ++
-        setIsManualColoringMode(false);
-        setSelectedColor(null);
+        // 不再退出手动编辑模式；仅当当前选中的上色色正是被排除/恢复的颜色时取消选中
+        if (selectedColor && selectedColor.color.toUpperCase() === upperHex) {
+          setSelectedColor(null);
+        }
     };
 
     // 一键恢复所有已排除颜色：把网格中全部"已排除"格子还原为排除前状态
@@ -2014,8 +2015,8 @@ export default function Home() {
         // 上色操作后隐藏提示
         setTooltipData(null);
       }
-      // Tooltip Logic (非手动上色模式点击或悬停)
-      else if (!isManualColoringMode) {
+      // Tooltip Logic (悬停事件；手动模式下点击由上方上色分支处理，不会进入这里)
+      else if (!isClick) {
         // 只有单元格实际有内容（非背景/外部区域）才会显示提示
         if (cellData && !cellData.isExternal && cellData.key) {
           // 检查是否已经显示了提示框，并且是否点击的是同一个位置
@@ -2938,8 +2939,8 @@ export default function Home() {
           </div> // This closes the main div started after originalImageSrc check
         )}
 
-        {/* ++ HIDE Color Counts in manual mode ++ */}
-        {!isManualColoringMode && originalImageSrc && colorCounts && Object.keys(colorCounts).length > 0 && (
+        {/* ++ Color Counts（手动编辑模式下同样显示；排除全部颜色时清单为空但保留已排除区块以便恢复）++ */}
+        {originalImageSrc && colorCounts && (Object.keys(colorCounts).length > 0 || excludedColorKeys.size > 0) && (
           // Apply dark mode styles to color counts container
           <div className="w-full md:max-w-2xl mt-6 bg-white dark:bg-gray-800 p-4 rounded-lg shadow border border-gray-100 dark:border-gray-700 color-stats-panel">
             {/* Title color */}
@@ -3051,8 +3052,8 @@ export default function Home() {
           </div>
         )} {/* ++ End of HIDE Color Counts ++ */}
 
-        {/* Message if palette becomes empty (Also hide in manual mode) */}
-         {!isManualColoringMode && originalImageSrc && activeBeadPalette.length === 0 && excludedColorKeys.size > 0 && (
+        {/* Message if palette becomes empty（手动编辑模式下同样显示）*/}
+         {originalImageSrc && activeBeadPalette.length === 0 && excludedColorKeys.size > 0 && (
              // Apply dark mode styles to the warning box
              <div className="w-full md:max-w-2xl mt-6 bg-yellow-100 dark:bg-yellow-900/50 p-4 rounded-lg shadow border border-yellow-200 dark:border-yellow-800/60 text-center text-sm text-yellow-800 dark:text-yellow-300">
                  当前可用颜色过少或为空。请在上方统计列表中查看已排除的颜色并恢复部分，或更换色板。
