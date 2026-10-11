@@ -194,7 +194,13 @@ Cloudflare 默认开启预览部署，规则是：
 | `VOLC_ACCESS_KEY_ID` | 运行时（Production + Preview） | 使用 AI 优化时必须 | 火山引擎 Access Key ID |
 | `VOLC_SECRET_ACCESS_KEY` | 运行时（Production + Preview） | 使用 AI 优化时必须 | 火山引擎 Secret Access Key |
 | `NODE_VERSION` | 构建时 | 可选 | 建议 `20`，避免默认 Node 版本过旧 |
-| `NEXT_PUBLIC_OFFICIAL_DOMAIN` | **构建时**（仅 Production） | 可选 | 形如 `https://pindou.348349.xyz/`；设置后访问其他域名会自动跳转到该域名 |
+| `NEXT_PUBLIC_OFFICIAL_DOMAIN` | **构建时**（仅 Production） | 可选 | 形如 `https://<你的域名>/`；设置后访问其他域名会自动跳转到该域名 |
+| `AUTH_SECRET` | 运行时（Production + Preview） | 使用云保存时必须 | 会话签名密钥（HS256）；配置方式见 [Cloudflare 云保存配置指南](./Cloudflare云保存配置.md) 第 3 步 |
+| `R2_STORAGE_LIMIT_BYTES` | 运行时（Production + Preview） | 可选 | 云保存的存储总量上限，默认 `1073741824`（1 GiB）；超出后拒绝保存 |
+| `R2_CLASS_A_LIMIT` | 运行时（Production + Preview） | 可选 | 每月 R2 Class A（写入/列举/删除）操作上限，默认 `100000` |
+| `R2_CLASS_B_LIMIT` | 运行时（Production + Preview） | 可选 | 每月 R2 Class B（读取）操作上限，默认 `1000000` |
+
+> 后三个是应用自己记账的「保险丝」，用来保证 R2 用量不会悄悄滑进计费区间；三个都不配也能正常跑，详见 [Cloudflare 云保存配置指南](./Cloudflare云保存配置.md) 的「用量上限与自设配额」。
 
 > `NEXT_PUBLIC_*` 变量会被编译进前端代码（`src/app/page.tsx` 中的跳转逻辑读取 `process.env.NEXT_PUBLIC_OFFICIAL_DOMAIN`），**修改后必须重新构建部署**才会生效。
 
@@ -228,10 +234,13 @@ npm run deploy
 ```bash
 echo "VOLC_ACCESS_KEY_ID=你的key" > .dev.vars
 echo "VOLC_SECRET_ACCESS_KEY=你的secret" >> .dev.vars
+echo "AUTH_SECRET=$(node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))")" >> .dev.vars
 npm run preview
 ```
 
-`npm run preview` = `npm run build && wrangler dev`，然后打开 <http://127.0.0.1:8787>。此时 `/api/ai-optimize` 可用。`.dev.vars` 已被 `.gitignore` 忽略，不要提交。
+`npm run preview` = `npm run build && wrangler dev`，然后打开 <http://127.0.0.1:8787>。此时 `/api/ai-optimize` 与云保存接口都可用（KV / R2 用 Wrangler 的本地模拟实现，不需要真的建命名空间）。`.dev.vars` 已被 `.gitignore` 忽略，不要提交。
+
+云保存相关的绑定与密钥（KV 命名空间、R2 桶、`AUTH_SECRET`）见 [Cloudflare 云保存配置指南](./Cloudflare云保存配置.md)。
 
 ## 9. 常见问题
 
@@ -275,7 +284,8 @@ npm run preview
 
 ## 10. 相关文档
 
-- [自建服务器部署](自建服务器部署.md) —— 部署到 Nginx / Docker / PM2（无 AI 优化接口）
-- [双端云保存待办](../规划/双端云保存待办.md) —— 云端持久化方案（尚未实现）
+- [Cloudflare 云保存配置指南](Cloudflare云保存配置.md) —— KV / R2 / `AUTH_SECRET` 的创建与回填，云保存功能的上线步骤
+- [自建服务器部署](自建服务器部署.md) —— 部署到 Nginx / Docker / PM2（无 AI 优化接口，也没有云保存）
+- [双端云保存待办](../规划/双端云保存待办.md) —— 立项时的方案与取舍；网站端已落地，小程序端尚未接线
 - [参考：即梦 4.0 接口文档](../参考/即梦4.0接口文档.md) —— AI 优化依赖的火山引擎接口
 - [Cloudflare 官方：Pages 迁移到 Workers 指南](https://developers.cloudflare.com/workers/prompts/pages-to-workers.txt)

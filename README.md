@@ -29,6 +29,12 @@ npm run deploy    # 部署到 Cloudflare（npx wrangler deploy）
 
 完整的部署步骤（从零注册 Cloudflare、Wrangler 命令行部署、连接 GitHub 自动部署、环境变量、Preview Deployment、自定义域名、常见问题）见 **[Cloudflare 部署指南](docs/部署/Cloudflare部署指南.md)**。
 
+### 作品云保存（可选）
+
+登录后可以把作品存到云端：账号密码注册/登录、`/works` 作品管理页，保存的内容包括生成参数、**索引压缩后的像素网格**（300×200 约 60KB）、原图与缩略图。数据存在 Cloudflare 的 KV（元数据）与 R2（对象），不依赖额外服务器。
+
+启用前需要创建 KV 命名空间、R2 存储桶并配置 `AUTH_SECRET`，步骤见 **[Cloudflare 云保存配置指南](docs/部署/Cloudflare云保存配置.md)**。不配置也能正常使用网站的全部本地功能，只是保存/登录相关接口会返回明确的未配置提示。
+
 ### 常用命令速查
 
 | 命令 | 说明 |
@@ -56,10 +62,11 @@ npm run deploy    # 部署到 Cloudflare（npx wrangler deploy）
 | 文档 | 说明 |
 |------|------|
 | [部署：Cloudflare](docs/部署/Cloudflare部署指南.md) | 推荐部署方式（静态导出 + Pages Function 编译为 Worker），含从零注册到 Preview Deployment 的完整步骤 |
+| [部署：Cloudflare 云保存](docs/部署/Cloudflare云保存配置.md) | 作品云保存的上线配置：KV 命名空间、R2 存储桶、`AUTH_SECRET`、部署与验证 |
 | [部署：自建服务器](docs/部署/自建服务器部署.md) | 非 Cloudflare 环境的部署说明（Nginx / Docker / PM2 等） |
 | [功能：一键去背景](docs/功能/一键去背景.md) | 一键去背景的实现原理、关键函数与调用链 |
 | [参考：即梦 4.0 接口文档](docs/参考/即梦4.0接口文档.md) | 火山引擎即梦（Jimeng）图像生成接口原始文档存档 |
-| [规划：双端云保存待办](docs/规划/双端云保存待办.md) | 网站端与小程序端共享作品数据的待办方案（当前未实现） |
+| [规划：双端云保存待办](docs/规划/双端云保存待办.md) | 网站端与小程序端共享作品数据的方案；网站端已实现，小程序端待接线 |
 
 ## 展示案例
 

@@ -112,8 +112,15 @@ import DonationModal from '../components/DonationModal';
 import FocusModePreDownloadModal from '../components/FocusModePreDownloadModal';
 import ImageCropperModal from '../components/ImageCropperModal';
 import AIOptimizeModal from '../components/AIOptimizeModal';
+import SaveProjectModal from '../components/SaveProjectModal';
+import { useAuth } from '../components/AuthProvider';
+import { ApiRequestError, fetchAsDataUrl, getProject } from '../utils/apiClient';
+import { decodeGridFromBase64 } from '../utils/gridCodec';
+import type { ProjectDetail, ProjectSettings } from '../types/project';
 
 export default function Home() {
+  // ++ 云端作品保存：当前登录用户 ++
+  const { user, loading: authLoading, logout: logoutAccount } = useAuth();
   const [originalImageSrc, setOriginalImageSrc] = useState<string | null>(null);
   const [granularity, setGranularity] = useState<number>(50);
   const [granularityInput, setGranularityInput] = useState<string>("50");
@@ -221,6 +228,16 @@ export default function Home() {
   // 新增：AI优化弹窗状态
   const [isAIOptimizeOpen, setIsAIOptimizeOpen] = useState<boolean>(false);
 
+  // ++ 云端作品保存 ++
+  // 「保存到云端」弹窗
+  const [isSaveModalOpen, setIsSaveModalOpen] = useState<boolean>(false);
+  // 当前正在编辑的云端作品；非空时保存按钮是「更新作品」
+  const [currentProject, setCurrentProject] = useState<ProjectDetail | null>(null);
+  // 从云端载入后原图没被替换过，更新时不必重复上传原图
+  const [loadedProjectImageUnchanged, setLoadedProjectImageUnchanged] = useState<boolean>(false);
+  // 正在从云端拉取作品
+  const [isProjectLoading, setIsProjectLoading] = useState<boolean>(false);
+
   // 放大镜切换处理函数
   const handleToggleMagnifier = () => {
     const newActiveState = !isMagnifierActive;
@@ -307,6 +324,13 @@ export default function Home() {
 
   // ++ Add a ref for the main element ++
   const mainRef = useRef<HTMLElement>(null);
+
+  // ++ 云端作品保存 ++
+  // 从云端载入的作品，网格是从服务端解码出来的成品（可能含手动编辑），
+  // 不能紧接着被「按当前参数自动重新像素化」覆盖。这里用一个短暂的标记挡掉那一次重算。
+  const suppressAutoPixelationRef = useRef<boolean>(false);
+  // 保证 ?project= 只在鉴权确定后拉取一次
+  const projectLoadStartedRef = useRef<boolean>(false);
 
   // --- Derived State ---
 
@@ -624,6 +648,10 @@ export default function Home() {
           const syntheticImageSrc = generateSyntheticImageFromPixelData(mappedPixelData, gridDimensions);
           
           setOriginalImageSrc(syntheticImageSrc);
+
+          // ++ 导入 CSV 得到的是新作品，不再关联之前打开的云端作品 ++
+          setCurrentProject(null);
+          setLoadedProjectImageUnchanged(false);
           
           // 重置状态
           setIsManualColoringMode(false);
@@ -682,6 +710,10 @@ export default function Home() {
     setMaintainAspectRatio(true);
     autoDefaultDimensionsRef.current = true;
     setRemapTrigger(prev => prev + 1); // Trigger full remap for new image
+
+    // ++ 这是一张新图，不再属于之前打开的云端作品 ++
+    setCurrentProject(null);
+    setLoadedProjectImageUnchanged(false);
     
     // 关闭裁剪弹窗
     setIsCropperOpen(false);
@@ -1164,6 +1196,12 @@ export default function Home() {
 
   // 修改useEffect中的pixelateImage调用，加入模式参数
   useEffect(() => {
+    if (suppressAutoPixelationRef.current) {
+      // 刚从云端载入作品：网格已经解码就位，跳过这一次自动重新像素化，
+      // 否则会把服务端的成品网格（含手动编辑）按当前参数覆盖掉。
+      suppressAutoPixelationRef.current = false;
+      return;
+    }
     if (originalImageSrc && activeBeadPalette.length > 0) {
        const timeoutId = setTimeout(() => {
          if (originalImageSrc && originalCanvasRef.current && pixelatedCanvasRef.current && activeBeadPalette.length > 0) {
@@ -1195,6 +1233,133 @@ export default function Home() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [originalImageSrc, granularity, similarityThreshold, customPaletteSelections, pixelationMode, remapTrigger, verticalGranularity]);
+
+  // ++ 云端作品保存：把一份云端作品灌进编辑器 ++
+  // 网格直接来自服务端（索引压缩解码），参数按保存时的设置还原；
+  // 不重新像素化，以免丢掉手动编辑过的格子。
+  const applyProjectToEditor = async (project: ProjectDetail) => {
+    if (!project.grid_data) {
+      throw new Error('该作品没有保存像素网格数据');
+    }
+    const pixels = decodeGridFromBase64(project.grid_data);
+    const rows = pixels.length;
+    const cols = pixels[0]?.length ?? 0;
+    if (rows === 0 || cols === 0) {
+      throw new Error('网格数据为空');
+    }
+    const dimensions = { N: cols, M: rows };
+
+    const settings: Partial<ProjectSettings> = project.settings ?? {};
+
+    // 还原可用色板相关设置（顺序无关，React 会合并到同一次渲染）
+    if (Array.isArray(settings.excluded_colors)) {
+      setExcludedColorKeys(new Set(settings.excluded_colors));
+    }
+    if (settings.palette_selections && Object.keys(settings.palette_selections).length > 0) {
+      setCustomPaletteSelections(settings.palette_selections);
+      setIsCustomPalette(!!settings.is_custom_palette);
+    }
+    if (settings.color_system) {
+      setSelectedColorSystem(settings.color_system);
+    }
+    if (settings.mode) {
+      setPixelationMode(settings.mode === 'dominant' ? PixelationMode.Dominant : PixelationMode.Average);
+    }
+    if (typeof settings.similarity === 'number') {
+      setSimilarityThreshold(settings.similarity);
+      setSimilarityThresholdInput(String(settings.similarity));
+    }
+    if (typeof settings.maintain_aspect_ratio === 'boolean') {
+      setMaintainAspectRatio(settings.maintain_aspect_ratio);
+    }
+
+    // 颜色统计：优先用保存下来的，缺失时按网格重算
+    let counts: { [key: string]: { count: number; color: string } } = {};
+    let total = 0;
+    const savedCounts = project.stats?.color_counts;
+    if (savedCounts && typeof savedCounts === 'object' && Object.keys(savedCounts).length > 0) {
+      counts = savedCounts;
+      total = typeof project.stats?.total_beads === 'number'
+        ? project.stats.total_beads
+        : Object.values(savedCounts).reduce((sum, item) => sum + (item?.count ?? 0), 0);
+    } else {
+      pixels.forEach(row => {
+        row.forEach(cell => {
+          if (cell && !cell.isExternal) {
+            const colorKey = cell.color.toUpperCase();
+            if (counts[colorKey]) {
+              counts[colorKey].count++;
+            } else {
+              counts[colorKey] = { count: 1, color: cell.color };
+            }
+            total++;
+          }
+        });
+      });
+    }
+
+    // 原图：优先取云端存的原图，没有（例如 CSV 导入的作品）就按网格合成一张
+    let imageSrc: string | null = null;
+    if (project.original_url) {
+      imageSrc = await fetchAsDataUrl(project.original_url);
+    }
+    if (!imageSrc) {
+      imageSrc = generateSyntheticImageFromPixelData(pixels, dimensions);
+    }
+
+    // 挡住紧接其后的自动重新像素化（必须放在真正 setState 之前、且尽量贴近，
+    // 否则上方 await 原图的时间会把这段保护期耗掉）
+    suppressAutoPixelationRef.current = true;
+    window.setTimeout(() => { suppressAutoPixelationRef.current = false; }, 1000);
+
+    setMappedPixelData(pixels);
+    setGridDimensions(dimensions);
+    setColorCounts(counts);
+    setTotalBeadCount(total);
+    setInitialGridColorKeys(new Set(Object.keys(counts)));
+    setBackgroundRemovalUndo(null);
+    setIsManualColoringMode(false);
+    setSelectedColor(null);
+    setIsEraseMode(false);
+
+    // 格子数量对齐网格尺寸，避免之后重新映射时尺寸被改掉
+    setGranularity(dimensions.N);
+    setGranularityInput(String(dimensions.N));
+    setVerticalGranularity(dimensions.M);
+    setVerticalGranularityInput(String(dimensions.M));
+    autoDefaultDimensionsRef.current = false;
+
+    setCurrentProject(project);
+    setLoadedProjectImageUnchanged(true);
+    setOriginalImageSrc(imageSrc);
+  };
+
+  // ++ 云端作品保存：从 /?project=<id> 载入已保存的作品 ++
+  // output: "export" 静态导出下不能用 useSearchParams（会要求 Suspense 边界），
+  // 所以直接读 window.location.search。
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if (authLoading) return; // 等鉴权状态确定，再决定是拉取还是跳登录
+    const projectId = new URLSearchParams(window.location.search).get('project');
+    if (!projectId) return;
+    if (!user) {
+      window.location.href = `/login?next=${encodeURIComponent(`/?project=${projectId}`)}`;
+      return;
+    }
+    if (projectLoadStartedRef.current) return;
+    projectLoadStartedRef.current = true;
+
+    setIsProjectLoading(true);
+    getProject(projectId)
+      .then(project => applyProjectToEditor(project))
+      .catch((error: unknown) => {
+        console.error('载入云端作品失败:', error);
+        const message = error instanceof ApiRequestError ? error.message : (error as Error)?.message;
+        alert(`载入作品失败：${message || '未知错误'}`);
+      })
+      .finally(() => setIsProjectLoading(false));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [authLoading, user]);
 
   // 确保文件输入框引用在组件挂载后正确设置
   useEffect(() => {
@@ -2126,6 +2291,60 @@ export default function Home() {
 
     {/* Apply dark mode styles to the main container */}
     <div className="min-h-screen p-4 sm:p-6 flex flex-col items-center bg-gradient-to-b from-gray-50 to-white dark:from-gray-800 dark:to-gray-900 font-[family-name:var(--font-geist-sans)] overflow-x-hidden">
+      {/* ++ 云端作品保存：账号导航条 ++ */}
+      <nav className="w-full md:max-w-4xl flex flex-wrap items-center justify-end gap-2 sm:gap-3 text-xs sm:text-sm mb-2">
+        <a
+          href="/works"
+          className="px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 hover:bg-white dark:hover:bg-gray-700 transition-colors"
+        >
+          我的作品
+        </a>
+        {authLoading ? (
+          <span className="px-3 py-1.5 text-gray-400">加载中...</span>
+        ) : user ? (
+          <>
+            <span className="px-2 py-1.5 text-gray-600 dark:text-gray-300 max-w-[10rem] truncate" title={user.username}>
+              {user.nickname || user.username}
+            </span>
+            <button
+              type="button"
+              onClick={async () => {
+                try {
+                  await logoutAccount();
+                  setCurrentProject(null);
+                  window.location.href = '/';
+                } catch (error) {
+                  console.error('退出登录失败:', error);
+                  alert('退出登录失败，请稍后重试');
+                }
+              }}
+              className="px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 hover:bg-white dark:hover:bg-gray-700 transition-colors"
+            >
+              退出登录
+            </button>
+          </>
+        ) : (
+          <>
+            <a
+              href="/login"
+              className="px-3 py-1.5 rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition-colors"
+            >
+              登录
+            </a>
+            <a
+              href="/register"
+              className="px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 hover:bg-white dark:hover:bg-gray-700 transition-colors"
+            >
+              注册
+            </a>
+          </>
+        )}
+      </nav>
+      {isProjectLoading && (
+        <div className="w-full md:max-w-4xl mb-2 rounded-lg bg-blue-50 dark:bg-blue-900/40 border border-blue-200 dark:border-blue-800 px-4 py-2 text-xs sm:text-sm text-blue-700 dark:text-blue-200">
+          正在载入云端作品...
+        </div>
+      )}
       {/* Apply dark mode styles to the header */}
       <header className="w-full md:max-w-4xl text-center mt-6 mb-8 sm:mt-8 sm:mb-10 relative overflow-hidden">
         {/* Adjust decorative background colors for dark mode */}
@@ -2737,6 +2956,23 @@ export default function Home() {
                  </svg>
                  进入专心拼豆模式（AplhaTest）
              </button>
+
+             {/* ++ 云端作品保存 ++ */}
+             <button
+                onClick={() => {
+                  if (!user) {
+                    window.location.href = '/login';
+                    return;
+                  }
+                  setIsSaveModalOpen(true);
+                }}
+                className={`w-full py-2.5 px-4 text-sm sm:text-base rounded-lg transition-all duration-300 flex items-center justify-center gap-2 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white shadow-md hover:shadow-lg hover:translate-y-[-1px]`}
+              >
+                 <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                   <path strokeLinecap="round" strokeLinejoin="round" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                 </svg>
+                 {currentProject ? '更新云端作品' : '保存到云端'}
+             </button>
             </div>
         )} {/* ++ End of RENDER Enter Manual Mode Button ++ */}
 
@@ -2996,6 +3232,38 @@ export default function Home() {
         isOpen={isAIOptimizeOpen}
         onClose={handleAIOptimizeClose}
         onOptimized={handleAIOptimized}
+      />
+
+      {/* ++ 云端作品保存弹窗 ++ */}
+      <SaveProjectModal
+        isOpen={isSaveModalOpen}
+        onClose={() => setIsSaveModalOpen(false)}
+        projectId={currentProject?.id ?? null}
+        initialTitle={currentProject?.title}
+        initialDescription={currentProject?.description}
+        initialTags={currentProject?.tags}
+        initialStatus={currentProject?.status}
+        initialSource={currentProject?.source}
+        originalImageSrc={originalImageSrc}
+        mappedPixelData={mappedPixelData}
+        colorCounts={colorCounts}
+        totalBeadCount={totalBeadCount}
+        settings={{
+          granularity,
+          vertical_granularity: verticalGranularity,
+          maintain_aspect_ratio: maintainAspectRatio,
+          similarity: similarityThreshold,
+          mode: pixelationMode === PixelationMode.Dominant ? 'dominant' : 'average',
+          color_system: selectedColorSystem,
+          excluded_colors: Array.from(excludedColorKeys),
+          palette_selections: customPaletteSelections,
+          is_custom_palette: isCustomPalette,
+        }}
+        originalImageUnchanged={!!currentProject && loadedProjectImageUnchanged}
+        onSaved={(project) => {
+          setCurrentProject(project);
+          setLoadedProjectImageUnchanged(true);
+        }}
       />
     </div>
    </>
