@@ -118,7 +118,7 @@ npm run deploy    # 等价于 npx wrangler deploy
 
 1. 打开 [Cloudflare Dashboard](https://dash.cloudflare.com/) → **Workers & Pages** → 选择 `perler-beads-ai`。
 2. **Settings** → **Variables and Secrets** → **Add**。
-3. 添加下面两个变量，类型都选 **Secret**，并在 **Production** 和 **Preview** 上都勾选：
+3. 添加下面两个变量，**类型都选 `Secret`**，并在 **Production** 和 **Preview** 上都勾选（只填一个环境的话，另一个环境（域名 vs 分支预览地址）里 AI 优化会失败）：
 
    | 变量名 | 值 |
    |--------|-----|
@@ -126,6 +126,14 @@ npm run deploy    # 等价于 npx wrangler deploy
    | `VOLC_SECRET_ACCESS_KEY` | 火山引擎 Secret Access Key |
 
 4. 保存后**重新部署一次**（**Deployments** → 最新一次部署右侧 `…` → **Retry deployment**），变量才会生效。
+
+> ⚠️ 三个最容易踩的坑：
+>
+> 1. **类型必须是 `Secret`。** 选成 `Text`（明文变量）时，`wrangler deploy` 会在部署过程中把它删掉：Wrangler 默认把配置文件当作环境配置的唯一事实来源，`keep_vars` 缺省为 `false`，所以每次部署都会先清空面板上的明文变量、再写入配置文件里的变量（本仓库已在 `wrangler.jsonc` 里显式设置 `"keep_vars": true` 兜底，但仍建议用 `Secret` —— Wrangler 从不会删除 Secret 类型的变量）。
+> 2. **不要填在「Build variables / 构建时变量」里。** 构建变量只在 `npm run build` 期间可见，Worker 运行时读不到；必须填在 **Settings → Variables and Secrets**（运行时变量）。
+> 3. **变量名要一字不差**：`VOLC_ACCESS_KEY_ID`、`VOLC_SECRET_ACCESS_KEY`。写成 `VOLC_SECRET_KEY`、`VOLC_ACCESS_SECRET` 之类都等同于没配，运行时报的错见 Q10。
+
+> 用命令行部署（方式一）时，也可以在仓库根目录直接执行 `npx wrangler secret put VOLC_ACCESS_KEY_ID` 与 `npx wrangler secret put VOLC_SECRET_ACCESS_KEY` 写入同样的 Secret（Wrangler 也不会在后续部署中删除它们），效果与面板上添加 `Secret` 类型变量一致。
 
 > 不使用 AI 优化功能的话可以跳过这一步，其余功能完全不受影响。
 
@@ -186,9 +194,17 @@ Cloudflare 默认开启预览部署，规则是：
 | `VOLC_ACCESS_KEY_ID` | 运行时（Production + Preview） | 使用 AI 优化时必须 | 火山引擎 Access Key ID |
 | `VOLC_SECRET_ACCESS_KEY` | 运行时（Production + Preview） | 使用 AI 优化时必须 | 火山引擎 Secret Access Key |
 | `NODE_VERSION` | 构建时 | 可选 | 建议 `20`，避免默认 Node 版本过旧 |
-| `NEXT_PUBLIC_OFFICIAL_DOMAIN` | **构建时**（仅 Production） | 可选 | 形如 `https://pindou.348349.xyz/`；设置后访问其他域名会自动跳转到该域名 |
+| `NEXT_PUBLIC_OFFICIAL_DOMAIN` | **构建时**（仅 Production） | 可选 | 形如 `https://<你的域名>/`；设置后访问其他域名会自动跳转到该域名 |
+| `AUTH_SECRET` | 运行时（Production + Preview） | 使用云保存时必须 | 会话签名密钥（HS256）；配置方式见 [Cloudflare 云保存配置指南](./Cloudflare云保存配置.md) 第 3 步 |
+| `R2_STORAGE_LIMIT_BYTES` | 运行时（Production + Preview） | 可选 | 云保存的存储总量上限，默认 `1073741824`（1 GiB）；超出后拒绝保存 |
+| `R2_CLASS_A_LIMIT` | 运行时（Production + Preview） | 可选 | 每月 R2 Class A（写入/列举/删除）操作上限，默认 `100000` |
+| `R2_CLASS_B_LIMIT` | 运行时（Production + Preview） | 可选 | 每月 R2 Class B（读取）操作上限，默认 `1000000` |
+
+> 后三个是应用自己记账的「保险丝」，用来保证 R2 用量不会悄悄滑进计费区间；三个都不配也能正常跑，详见 [Cloudflare 云保存配置指南](./Cloudflare云保存配置.md) 的「用量上限与自设配额」。
 
 > `NEXT_PUBLIC_*` 变量会被编译进前端代码（`src/app/page.tsx` 中的跳转逻辑读取 `process.env.NEXT_PUBLIC_OFFICIAL_DOMAIN`），**修改后必须重新构建部署**才会生效。
+
+> 运行时的 `VOLC_*` 只在面板维护。`wrangler.jsonc` 中设置了 `"keep_vars": true`，以免 `wrangler deploy` 在部署时清空面板上的明文变量；Secret 类型的变量本来就不会被删除（`npx wrangler deploy --help`：「Note that secrets are never deleted by deployments.」）。
 
 > 兼容性标志：**不需要**开启 `nodejs_compat`。`functions/api/ai-optimize.ts` 只使用 Web Crypto（`crypto.subtle`）和 `fetch`，没有引入任何 Node 内置模块。
 
@@ -218,10 +234,13 @@ npm run deploy
 ```bash
 echo "VOLC_ACCESS_KEY_ID=你的key" > .dev.vars
 echo "VOLC_SECRET_ACCESS_KEY=你的secret" >> .dev.vars
+echo "AUTH_SECRET=$(node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))")" >> .dev.vars
 npm run preview
 ```
 
-`npm run preview` = `npm run build && wrangler dev`，然后打开 <http://127.0.0.1:8787>。此时 `/api/ai-optimize` 可用。`.dev.vars` 已被 `.gitignore` 忽略，不要提交。
+`npm run preview` = `npm run build && wrangler dev`，然后打开 <http://127.0.0.1:8787>。此时 `/api/ai-optimize` 与云保存接口都可用（KV / R2 用 Wrangler 的本地模拟实现，不需要真的建命名空间）。`.dev.vars` 已被 `.gitignore` 忽略，不要提交。
+
+云保存相关的绑定与密钥（KV 命名空间、R2 桶、`AUTH_SECRET`）见 [Cloudflare 云保存配置指南](./Cloudflare云保存配置.md)。
 
 ## 9. 常见问题
 
@@ -232,7 +251,7 @@ npm run preview
 `out/.assetsignore` 没生成。检查 `npm run build` 是否完整跑了三步（尤其是 `node scripts/postbuild-assets.mjs`）。
 
 **Q3：页面上点 AI 优化提示失败或 404。**
-按顺序检查：① 本地是不是用的 `npm run dev`（换成 `npm run preview`）；② Cloudflare 项目里有没有配 `VOLC_ACCESS_KEY_ID` / `VOLC_SECRET_ACCESS_KEY`；③ 配完是否重新部署过一次（环境变量改动不会自动应用）；④ 火山引擎侧的密钥是否有即梦（`jimeng_t2i_v40`）权限。
+按顺序检查：① 本地是不是用的 `npm run dev`（换成 `npm run preview`）；② Cloudflare 项目里有没有配 `VOLC_ACCESS_KEY_ID` / `VOLC_SECRET_ACCESS_KEY`（变量配置的坑见 Q10）；③ 配完是否重新部署过一次（环境变量改动不会自动应用）；④ 火山引擎侧的密钥是否有即梦（`jimeng_t2i_v40`）权限。
 
 **Q4：部署成功但 AI 接口 404，其他都正常。**
 确认 `functions/api/ai-optimize.ts` 在仓库根目录（与 `out/` 同级）且已提交，并且 `wrangler.jsonc` 的 `main` 指向 `./out/_worker.js/index.js`。
@@ -252,9 +271,21 @@ npm run preview
 **Q9：构建和部署都成功了，但访问网站还是旧内容。**
 九成是 `wrangler.jsonc` 的 `name` 和面板上的项目名不一致。`wrangler deploy` 按 `name` 找项目，找不到就**静默新建一个同名 Worker**，于是这次部署根本没有落到你域名指向的那个项目上。到 **Workers & Pages** 列表里看是不是多了一个项目，把 `name` 改成与面板项目名完全一致（本仓库为 `perler-beads-ai`）后重新部署。
 
+**Q10：点「开始优化」报 `Imported HMAC key length (0) must be a non-zero value up to 7 bits less than, and no greater than, the bit length of the raw key data (0).`**
+这是 Worker 运行时**没读到**密钥的典型表现（本地 `.dev.vars` 里有值，所以同一份代码 `npm run preview` 一切正常）：密钥为空时 `functions/api/ai-optimize.ts` 中 `TextEncoder.encode(undefined)` 得到 0 字节，`crypto.subtle.importKey` 就会抛出这条 Web Crypto 报错。也就是说问题不在代码，而在变量有没有真正注入到这个 Worker 版本的运行时。按顺序排查：
+
+1. **变量名**是否一字不差：`VOLC_ACCESS_KEY_ID`、`VOLC_SECRET_ACCESS_KEY`；
+2. **类型**是否误选成 `Text`：明文变量会被 `wrangler deploy` 清空（详见第 3 步提示，本仓库已用 `keep_vars: true` 兜底）；
+3. 是否错填在 **Build variables（构建时变量）** 里，而不是 **Variables and Secrets（运行时变量）**；
+4. 访问地址属于哪个环境：正式域名读 **Production** 变量，分支/PR 预览地址读 **Preview** 变量，两边都要配；
+5. 变量是否配在了**另一个** Worker 上（`name` 与面板项目名不一致时 `wrangler deploy` 会另建 Worker，见 Q9）。
+
+配好后重新部署一次即可。另外，新版 `functions/api/ai-optimize.ts` 在变量缺失时会直接返回 `SERVER_NOT_CONFIGURED` 并说明缺哪个变量：如果你看到的是这条提示，说明 Worker 与构建链路都正常，问题只在上面的变量配置；如果看到的仍是 HMAC 报错，说明部署的还是旧代码（重新构建部署一次）。
+
 ## 10. 相关文档
 
-- [自建服务器部署](自建服务器部署.md) —— 部署到 Nginx / Docker / PM2（无 AI 优化接口）
-- [双端云保存待办](../规划/双端云保存待办.md) —— 云端持久化方案（尚未实现）
+- [Cloudflare 云保存配置指南](Cloudflare云保存配置.md) —— KV / R2 / `AUTH_SECRET` 的创建与回填，云保存功能的上线步骤
+- [自建服务器部署](自建服务器部署.md) —— 部署到 Nginx / Docker / PM2（无 AI 优化接口，也没有云保存）
+- [双端云保存待办](../规划/双端云保存待办.md) —— 立项时的方案与取舍；网站端已落地，小程序端尚未接线
 - [参考：即梦 4.0 接口文档](../参考/即梦4.0接口文档.md) —— AI 优化依赖的火山引擎接口
 - [Cloudflare 官方：Pages 迁移到 Workers 指南](https://developers.cloudflare.com/workers/prompts/pages-to-workers.txt)

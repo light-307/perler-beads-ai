@@ -45,6 +45,12 @@ yarn-error.log*
 .dev.vars
 .wrangler/
 
+# 临时验证脚本与构建产物（例如 wrangler pages functions build 的 outdir）
+.scratch/
+
+# Playwright MCP 的本地调试产物（控制台日志与页面快照）
+.playwright-mcp/
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts

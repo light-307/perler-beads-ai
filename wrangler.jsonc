@@ -4,6 +4,13 @@
   "name": "perler-beads-ai",
   "compatibility_date": "2024-12-01",
 
+  // 环境变量只在 Cloudflare 面板的 Settings → Variables and Secrets 里维护（见 docs/部署/Cloudflare部署指南.md）。
+  // Wrangler 默认把配置文件当作唯一事实来源：keep_vars 缺省（false）时，每次 `wrangler deploy` 都会删掉面板上
+  // 添加的**明文**变量，运行时的 env.VOLC_* 就变成 undefined，AI 优化会报 HMAC key length (0) 之类的错。
+  // 这里显式开启，保证面板上配置的变量不会被部署流程覆盖。
+  // （类型为 Secret 的变量 Wrangler 始终不会删除，但误用明文类型时就会被删。）
+  "keep_vars": true,
+
   // next build（next.config.ts 里 output: "export"）导出的静态资源目录
   "assets": {
     "directory": "./out",
@@ -11,5 +18,25 @@
   },
 
   // Pages Functions 编译产物，由 `npm run build` 生成（见 scripts/ 与 docs/部署/Cloudflare部署指南.md）
-  "main": "./out/_worker.js/index.js"
+  "main": "./out/_worker.js/index.js",
+
+  // 作品元数据（用户名索引、用户记录、作品记录）存 KV。
+  // ⚠️ 部署前必须把下面的 id 换成你自己的 KV 命名空间 id（32 位十六进制字符串）。
+  //    本地 `npm run preview` 用的是 Wrangler 模拟出来的本地 KV，不校验这个 id。
+  //    获取方式见 docs/部署/Cloudflare云保存配置.md 第 2 步。
+  "kv_namespaces": [
+    {
+      "binding": "PB_KV",
+      "id": "03f43751afeb49d482b8d81dc340ebea"
+    }
+  ],
+
+  // 作品网格（索引压缩后约 60KB）与原图/AI 图/缩略图存 R2。
+  // bucket_name 就是控制台里创建的存储桶名字，不需要 id；名字不一致会在部署时报错。
+  "r2_buckets": [
+    {
+      "binding": "PB_R2",
+      "bucket_name": "perler-beads-works"
+    }
+  ]
 }
