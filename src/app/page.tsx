@@ -326,6 +326,19 @@ export default function Home() {
   // ++ Add a ref for the main element ++
   const mainRef = useRef<HTMLElement>(null);
 
+  // ++ 载入图片 / 打开作品后，把「拖放图片」框滚到视口顶部作为浏览起点 ++
+  const dropZoneRef = useRef<HTMLDivElement>(null);
+  const scrollToDropZone = useCallback(() => {
+    // 等这次 setState 的渲染提交完再滚动，避免随后插入的控件/预览区打断滚动
+    window.requestAnimationFrame(() => {
+      const dropZone = dropZoneRef.current;
+      if (!dropZone) return;
+      const reduceMotion = typeof window.matchMedia === 'function'
+        && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      dropZone.scrollIntoView({ behavior: reduceMotion ? 'auto' : 'smooth', block: 'start' });
+    });
+  }, []);
+
   // ++ 云端作品保存 ++
   // 从云端载入的作品，网格是从服务端解码出来的成品（可能含手动编辑），
   // 不能紧接着被「按当前参数自动重新像素化」覆盖。这里用一个短暂的标记挡掉那一次重算。
@@ -650,6 +663,9 @@ export default function Home() {
           
           setOriginalImageSrc(syntheticImageSrc);
 
+          // 导入完成后从拖放框位置开始浏览
+          scrollToDropZone();
+
           // ++ 导入 CSV 得到的是新作品，不再关联之前打开的云端作品 ++
           setCurrentProject(null);
           setLoadedProjectImageUnchanged(false);
@@ -725,6 +741,9 @@ export default function Home() {
     setIsManualColoringMode(false);
     setSelectedColor(null);
     setIsEraseMode(false);
+
+    // 载入新图后，从拖放框位置开始浏览
+    scrollToDropZone();
   };
 
   // 处理裁剪取消
@@ -753,6 +772,8 @@ export default function Home() {
     // 使用优化后的图片替换原图，并重新处理
     setOriginalImageSrc(optimizedImageSrc);
     setBackgroundRemovalUndo(null);
+    // 优化结果也是一张新图，同样从拖放框位置开始浏览
+    scrollToDropZone();
     // 新增：优化后图片宽高比可能变化，保持长宽比时按新比例重算纵轴切割数量
     if (maintainAspectRatio) {
       setVerticalGranularity(null);
@@ -1313,6 +1334,9 @@ export default function Home() {
     setCurrentProject(project);
     setLoadedProjectImageUnchanged(true);
     setOriginalImageSrc(imageSrc);
+
+    // 打开云端作品后，从拖放框位置开始浏览（预览区就在它下方）
+    scrollToDropZone();
   };
 
   // ++ 云端作品保存：从 /?project=<id> 载入已保存的作品 ++
@@ -2443,9 +2467,10 @@ export default function Home() {
       <main ref={mainRef} className="w-full md:max-w-4xl flex flex-col items-center space-y-5 sm:space-y-6 relative overflow-hidden">
         {/* Apply dark mode styles to the Drop Zone */}
         <div
+          ref={dropZoneRef}
           onDrop={handleDrop} onDragOver={handleDragOver} onDragEnter={handleDragOver}
           onClick={isMounted ? triggerFileInput : undefined}
-          className={`border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg p-6 sm:p-8 text-center ${isMounted ? 'cursor-pointer hover:border-blue-400 dark:hover:border-blue-500 hover:bg-blue-50 dark:hover:bg-gray-800' : 'cursor-wait'} transition-all duration-300 w-full md:max-w-md flex flex-col justify-center items-center shadow-sm hover:shadow-md`}
+          className={`scroll-mt-3 border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg p-6 sm:p-8 text-center ${isMounted ? 'cursor-pointer hover:border-blue-400 dark:hover:border-blue-500 hover:bg-blue-50 dark:hover:bg-gray-800' : 'cursor-wait'} transition-all duration-300 w-full md:max-w-md flex flex-col justify-center items-center shadow-sm hover:shadow-md`}
           style={{ minHeight: '130px' }}
         >
           {/* Icon color */}
