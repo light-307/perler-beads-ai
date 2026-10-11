@@ -16,6 +16,7 @@ export const onRequestGet = async (context: PagesContext): Promise<Response> => 
           ...project,
           thumbnail_url: fileUrl(project.files.thumbnail),
           original_url: fileUrl(project.files.original),
+          blueprint_url: fileUrl(project.files.blueprint),
         })),
       },
       { status: 200 }
@@ -40,6 +41,7 @@ export const onRequestPost = async (context: PagesContext): Promise<Response> =>
           original_url: fileUrl(project.files.original),
           ai_url: fileUrl(project.files.ai),
           thumbnail_url: fileUrl(project.files.thumbnail),
+          blueprint_url: fileUrl(project.files.blueprint),
         },
       },
       { status: 201 }

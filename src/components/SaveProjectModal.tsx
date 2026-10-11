@@ -24,7 +24,11 @@ interface SaveProjectModalProps {
   initialStatus?: ProjectStatus;
   /** 已有作品的来源类型；更新时原样带回，避免被改写成 photo */
   initialSource?: ProjectSource;
+  /** 本次保存实际使用的来源类型（优先于 initialSource，用于「导入拼豆图纸」链路） */
+  source?: ProjectSource;
   originalImageSrc: string | null;
+  /** 导入的拼豆图纸原图；与 originalImageSrc 是两种不同的图片类型 */
+  blueprintImageSrc?: string | null;
   mappedPixelData: MappedPixel[][] | null;
   colorCounts: { [key: string]: { count: number; color: string } } | null;
   totalBeadCount: number;
@@ -34,6 +38,8 @@ interface SaveProjectModalProps {
    * 省掉一次几 MB 的无效上行。
    */
   originalImageUnchanged?: boolean;
+  /** 同上，针对拼豆图纸原图 */
+  blueprintImageUnchanged?: boolean;
   onSaved: (project: ProjectDetail) => void;
 }
 
@@ -56,12 +62,15 @@ export default function SaveProjectModal({
   initialTags,
   initialStatus,
   initialSource,
+  source,
   originalImageSrc,
+  blueprintImageSrc,
   mappedPixelData,
   colorCounts,
   totalBeadCount,
   settings,
   originalImageUnchanged,
+  blueprintImageUnchanged,
   onSaved,
 }: SaveProjectModalProps) {
   const [title, setTitle] = useState('');
@@ -114,10 +123,13 @@ export default function SaveProjectModal({
       setStage('thumbnail');
       const thumbnail = await createProjectThumbnail(mappedPixelData);
 
-      const images: { original?: string | null; thumbnail?: string | null } = {};
+      const images: { original?: string | null; thumbnail?: string | null; blueprint?: string | null } = {};
       // 更新已有作品且原图没换过时不再重复上传，省一次几 MB 的上行
       if (!(isUpdate && originalImageUnchanged)) {
         if (originalImageSrc) images.original = originalImageSrc;
+      }
+      if (!(isUpdate && blueprintImageUnchanged)) {
+        if (blueprintImageSrc) images.blueprint = blueprintImageSrc;
       }
       if (thumbnail) images.thumbnail = thumbnail;
 
@@ -132,7 +144,7 @@ export default function SaveProjectModal({
         title: trimmedTitle,
         description: description.trim(),
         tags,
-        source: initialSource ?? 'photo',
+        source: source ?? initialSource ?? 'photo',
         color_system: settings.color_system,
         settings,
         stats: { color_counts: colorCounts ?? {}, total_beads: totalBeadCount },

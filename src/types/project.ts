@@ -9,7 +9,7 @@
 import type { ColorSystem } from '../utils/pixelation';
 
 /** 作品来源。保留 `handdrawn` / `ai` 是为了后续接入小程序手绘与 AI 生成链路。 */
-export type ProjectSource = 'photo' | 'handdrawn' | 'ai';
+export type ProjectSource = 'photo' | 'handdrawn' | 'ai' | 'blueprint';
 
 /** 制作状态。与小程序 `pixel_art_gallery` 里的 status 字段保持一致。 */
 export type ProjectStatus = 'unfinished' | 'finished';
@@ -79,6 +79,8 @@ export interface ProjectFiles {
   ai?: string;
   thumbnail?: string;
   grid?: string;
+  /** 导入的拼豆图纸原图（与 original 是两种不同的图片类型） */
+  blueprint?: string;
 }
 
 /** 每个 R2 对象的字节数，key 即对象 key。用于精确统计存储用量。 */
@@ -121,6 +123,8 @@ export interface ProjectDetail extends ProjectMeta {
   original_url: string | null;
   ai_url: string | null;
   thumbnail_url: string | null;
+  /** 拼豆图纸原图访问地址 */
+  blueprint_url: string | null;
 }
 
 /** 创建/更新作品的请求体。 */
@@ -140,6 +144,8 @@ export interface ProjectWritePayload {
     original?: string | null;
     ai?: string | null;
     thumbnail?: string | null;
+    /** 拼豆图纸原图 */
+    blueprint?: string | null;
   };
 }
 

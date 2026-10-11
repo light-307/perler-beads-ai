@@ -58,8 +58,13 @@ const EXT_BY_MIME: Record<string, string> = {
   'image/gif': 'gif',
 };
 
-const PROJECT_SOURCES: ProjectSource[] = ['photo', 'handdrawn', 'ai'];
+const PROJECT_SOURCES: ProjectSource[] = ['photo', 'handdrawn', 'ai', 'blueprint'];
 const PROJECT_STATUSES: ProjectStatus[] = ['unfinished', 'finished'];
+
+/** R2 里保存的图片种类：original=原图，ai=AI 优化图，thumb=缩略图，blueprint=导入的拼豆图纸 */
+type ImageKind = 'original' | 'ai' | 'thumb' | 'blueprint';
+/** 图片种类 → 请求体 `images` 字段名 */
+type ImageField = 'original' | 'ai' | 'thumbnail' | 'blueprint';
 
 export function assertProjectId(id: string): string {
   if (!PROJECT_ID_PATTERN.test(id)) {
@@ -72,7 +77,7 @@ const projectKey = (userId: string, projectId: string) => `proj:${userId}:${proj
 const projectPrefix = (userId: string) => `proj:${userId}:`;
 
 export const gridObjectKey = (userId: string, projectId: string) => `u/${userId}/${projectId}/grid.bin`;
-export const imageObjectKey = (userId: string, projectId: string, kind: 'original' | 'ai' | 'thumb', ext: string) =>
+export const imageObjectKey = (userId: string, projectId: string, kind: ImageKind, ext: string) =>
   `u/${userId}/${projectId}/${kind}.${ext}`;
 
 /** R2 对象 key → 同源访问地址。避免在任何响应里内联 base64 图片。 */
@@ -319,6 +324,7 @@ export async function createProject(env: Env, userId: string, payload: ProjectWr
   const original = decodeImageDataUrl(images.original, MAX_IMAGE_BYTES, '原图');
   const ai = decodeImageDataUrl(images.ai, MAX_IMAGE_BYTES, 'AI 优化图');
   const thumbnail = decodeImageDataUrl(images.thumbnail, MAX_THUMBNAIL_BYTES, '缩略图');
+  const blueprint = decodeImageDataUrl(images.blueprint, MAX_IMAGE_BYTES, '拼豆图纸');
 
   // 先把"要写哪些对象、各占多少字节"全部算清楚再做配额检查，
   // 这样一旦超限，一个字节都还没写进 R2。
@@ -329,8 +335,8 @@ export async function createProject(env: Env, userId: string, payload: ProjectWr
   ];
 
   const addImage = (
-    kind: 'original' | 'ai' | 'thumb',
-    field: 'original' | 'ai' | 'thumbnail',
+    kind: ImageKind,
+    field: ImageField,
     image: DecodedImage | null
   ): void => {
     if (!image) return;
@@ -348,6 +354,7 @@ export async function createProject(env: Env, userId: string, payload: ProjectWr
   addImage('original', 'original', original);
   addImage('ai', 'ai', ai);
   addImage('thumb', 'thumbnail', thumbnail);
+  addImage('blueprint', 'blueprint', blueprint);
 
   const totalBytes = sumBytes(fileBytes);
   await ensureStorageAvailable(env, totalBytes);
@@ -429,10 +436,11 @@ export async function updateProject(env: Env, userId: string, projectId: string,
   }
 
   const images = payload?.images ?? {};
-  const nextImages: Array<{ kind: 'original' | 'ai' | 'thumb'; field: 'original' | 'ai' | 'thumbnail'; decoded: DecodedImage | null }> = [
+  const nextImages: Array<{ kind: ImageKind; field: ImageField; decoded: DecodedImage | null }> = [
     { kind: 'original', field: 'original', decoded: decodeImageDataUrl(images.original, MAX_IMAGE_BYTES, '原图') },
     { kind: 'ai', field: 'ai', decoded: decodeImageDataUrl(images.ai, MAX_IMAGE_BYTES, 'AI 优化图') },
     { kind: 'thumb', field: 'thumbnail', decoded: decodeImageDataUrl(images.thumbnail, MAX_THUMBNAIL_BYTES, '缩略图') },
+    { kind: 'blueprint', field: 'blueprint', decoded: decodeImageDataUrl(images.blueprint, MAX_IMAGE_BYTES, '拼豆图纸') },
   ];
 
   for (const item of nextImages) {
@@ -491,7 +499,7 @@ export async function deleteProject(env: Env, userId: string, projectId: string)
   const project = await requireProject(env, userId, projectId);
   await getKV(env).delete(projectKey(userId, projectId));
 
-  const keys = [project.files.grid, project.files.original, project.files.ai, project.files.thumbnail];
+  const keys = [project.files.grid, project.files.original, project.files.ai, project.files.thumbnail, project.files.blueprint];
   // 兜底：把该作品目录下可能残留的对象一并清掉
   let removedBytes = projectStoredBytes(project);
   try {

@@ -112,11 +112,13 @@ import { computePreviewCanvasSize } from '../utils/canvasUtils';
 import DonationModal from '../components/DonationModal';
 import FocusModePreDownloadModal from '../components/FocusModePreDownloadModal';
 import ImageCropperModal from '../components/ImageCropperModal';
+import BlueprintRegionModal from '../components/BlueprintRegionModal';
 import AIOptimizeModal from '../components/AIOptimizeModal';
 import SaveProjectModal from '../components/SaveProjectModal';
 import { useAuth } from '../components/AuthProvider';
 import { ApiRequestError, fetchAsDataUrl, getProject } from '../utils/apiClient';
 import { decodeGridFromBase64 } from '../utils/gridCodec';
+import { parseBlueprintImage, type PixelRect } from '../utils/blueprintParser';
 import type { ProjectDetail, ProjectSettings } from '../types/project';
 
 export default function Home() {
@@ -239,6 +241,14 @@ export default function Home() {
   // 正在从云端拉取作品
   const [isProjectLoading, setIsProjectLoading] = useState<boolean>(false);
 
+  // ++ 导入拼豆图纸 ++
+  // 当前工作区来自「导入拼豆图纸」：隐藏参数面板、固定 MARD 色号、云端保存为 blueprint 类型
+  const [isBlueprintMode, setIsBlueprintMode] = useState<boolean>(false);
+  // 导入的拼豆图纸原图（data URL），解析与云端保存都用它
+  const [blueprintImageSrc, setBlueprintImageSrc] = useState<string | null>(null);
+  // 「选择图片区域和色号清单区域」弹窗
+  const [isBlueprintRegionModalOpen, setIsBlueprintRegionModalOpen] = useState<boolean>(false);
+
   // 放大镜切换处理函数
   const handleToggleMagnifier = () => {
     const newActiveState = !isMagnifierActive;
@@ -312,6 +322,8 @@ export default function Home() {
   const originalCanvasRef = useRef<HTMLCanvasElement>(null);
   const pixelatedCanvasRef = useRef<HTMLCanvasElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  // 「拖放拼豆图纸到此处」的文件输入
+  const blueprintInputRef = useRef<HTMLInputElement>(null);
   // 新增：当前图片宽高比（img.height / img.width），用于横纵轴切割数量联动计算
   const imgAspectRatioRef = useRef<number>(1);
   // 新增：新图片标志——为 true 时按"横纵较大者为50"计算默认切割数量
@@ -581,6 +593,155 @@ export default function Home() {
     event.stopPropagation();
   };
 
+  // ++ 导入拼豆图纸 ++
+  // 与「导入原始图片」是两条相似但不完全相同的流程：
+  // 原始图片走「裁剪 → 参数化像素化」，图纸走「框选图片区域/色号清单区域 → 算法解析」。
+
+  const isBlueprintFileType = (file: File): boolean => {
+    const type = (file.type || '').toLowerCase();
+    const name = (file.name || '').toLowerCase();
+    return (
+      type === 'image/jpeg' ||
+      type === 'image/jpg' ||
+      type === 'image/png' ||
+      name.endsWith('.jpg') ||
+      name.endsWith('.jpeg') ||
+      name.endsWith('.png')
+    );
+  };
+
+  const triggerBlueprintInput = () => {
+    if (!isMounted) return;
+    blueprintInputRef.current?.click();
+  };
+
+  const processBlueprintFile = (file: File) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = reader.result;
+      if (typeof result !== 'string') {
+        alert('无法读取图片内容，请重试。');
+        return;
+      }
+      setBlueprintImageSrc(result);
+      setIsBlueprintRegionModalOpen(true);
+    };
+    reader.onerror = () => alert('读取图片失败，请重试。');
+    reader.readAsDataURL(file);
+  };
+
+  const handleBlueprintFileChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      if (isBlueprintFileType(file)) {
+        processBlueprintFile(file);
+      } else {
+        alert(`不支持的文件类型: ${file.type || '未知'}。请选择 JPG、PNG 格式的拼豆图纸。\n文件名: ${file.name}`);
+      }
+    }
+    if (event.target) {
+      event.target.value = '';
+    }
+  };
+
+  const handleBlueprintDrop = (event: DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    try {
+      const file = event.dataTransfer.files?.[0];
+      if (!file) return;
+      if (isBlueprintFileType(file)) {
+        processBlueprintFile(file);
+      } else {
+        alert(`不支持的文件类型: ${file.type || '未知'}。请拖放 JPG、PNG 格式的拼豆图纸。\n文件名: ${file.name}`);
+      }
+    } catch (error) {
+      console.error('处理拖拽的拼豆图纸时发生错误:', error);
+      alert('处理文件时发生错误，请重试。');
+    }
+  };
+
+  /** 回到「导入原始图片」的工作区，清掉图纸模式残留 */
+  const exitBlueprintMode = () => {
+    setIsBlueprintMode(false);
+    setBlueprintImageSrc(null);
+  };
+
+  /** 用户主动退出图纸模式：连解析出来的网格一起清掉，回到初始状态 */
+  const handleExitBlueprintMode = () => {
+    exitBlueprintMode();
+    setOriginalImageSrc(null);
+    setMappedPixelData(null);
+    setGridDimensions(null);
+    setColorCounts(null);
+    setTotalBeadCount(0);
+    setInitialGridColorKeys(new Set());
+    setBackgroundRemovalUndo(null);
+    setIsManualColoringMode(false);
+    setSelectedColor(null);
+    setIsEraseMode(false);
+    setRemapTrigger(prev => prev + 1);
+  };
+
+  /** 框选完「图片区域」「色号清单区域」后：解析图纸并切换到图纸工作区 */
+  const handleBlueprintRegionConfirm = useCallback(
+    async ({ grid, palette }: { grid: PixelRect; palette: PixelRect }) => {
+      if (!blueprintImageSrc) {
+        alert('图纸图片丢失，请重新导入。');
+        return;
+      }
+      try {
+        const result = await parseBlueprintImage(blueprintImageSrc, grid, palette, 'MARD');
+
+        // 需求：色号系统固定为 MARD 221 色。这里以默认 221 色为基准，
+        // 再补上图纸里实际用到、但默认未选中的色号，避免解析结果被过滤掉。
+        const selections: PaletteSelections = { ...getDefaultPaletteSelections() };
+        Object.keys(result.colorCounts).forEach(hexKey => {
+          selections[hexKey.toUpperCase()] = true;
+        });
+        setCustomPaletteSelections(selections);
+        setIsCustomPalette(false);
+        setSelectedColorSystem('MARD');
+        setExcludedColorKeys(new Set());
+
+        // 预览图与色号清单都来自这一份 mappedPixelData，数量天然一致
+        setMappedPixelData(result.mappedPixelData);
+        setGridDimensions(result.gridDimensions);
+        setColorCounts(result.colorCounts);
+        setTotalBeadCount(result.totalBeadCount);
+        setInitialGridColorKeys(new Set(Object.keys(result.colorCounts)));
+
+        setOriginalImageSrc(blueprintImageSrc);
+        setIsBlueprintMode(true);
+
+        // 图纸模式不显示「切割数量」参数，但这两个值仍要跟着实际尺寸走
+        setGranularity(result.gridDimensions.N);
+        setGranularityInput(String(result.gridDimensions.N));
+        setVerticalGranularity(result.gridDimensions.M);
+        setVerticalGranularityInput(String(result.gridDimensions.M));
+        autoDefaultDimensionsRef.current = false;
+
+        setBackgroundRemovalUndo(null);
+        setIsManualColoringMode(false);
+        setSelectedColor(null);
+        setIsEraseMode(false);
+        setCurrentProject(null);
+        setLoadedProjectImageUnchanged(false);
+        setIsBlueprintRegionModalOpen(false);
+        setRemapTrigger(prev => prev + 1);
+        scrollToDropZone();
+
+        if (result.warnings.length > 0) {
+          alert(`图纸已解析完成，但有几点需要留意：\n\n${result.warnings.join('\n')}`);
+        }
+      } catch (error) {
+        console.error('解析拼豆图纸失败:', error);
+        alert(error instanceof Error ? `解析拼豆图纸失败：${error.message}` : '解析拼豆图纸失败，请重试。');
+      }
+    },
+    [blueprintImageSrc, scrollToDropZone],
+  );
+
   // 根据mappedPixelData生成合成的originalImageSrc
   const generateSyntheticImageFromPixelData = (pixelData: MappedPixel[][], dimensions: { N: number; M: number }): string => {
     const canvas = document.createElement('canvas');
@@ -662,6 +823,7 @@ export default function Home() {
           const syntheticImageSrc = generateSyntheticImageFromPixelData(mappedPixelData, gridDimensions);
           
           setOriginalImageSrc(syntheticImageSrc);
+          exitBlueprintMode();
 
           // 导入完成后从拖放框位置开始浏览
           scrollToDropZone();
@@ -711,6 +873,7 @@ export default function Home() {
   // 处理裁剪确认
   const handleCropConfirm = (croppedImageSrc: string) => {
     setOriginalImageSrc(croppedImageSrc);
+    exitBlueprintMode();
     setBackgroundRemovalUndo(null);
     setMappedPixelData(null);
     setGridDimensions(null);
@@ -771,6 +934,7 @@ export default function Home() {
   const handleAIOptimized = (optimizedImageSrc: string) => {
     // 使用优化后的图片替换原图，并重新处理
     setOriginalImageSrc(optimizedImageSrc);
+    exitBlueprintMode();
     setBackgroundRemovalUndo(null);
     // 优化结果也是一张新图，同样从拖放框位置开始浏览
     scrollToDropZone();
@@ -1198,6 +1362,10 @@ export default function Home() {
 
   // 修改useEffect中的pixelateImage调用，加入模式参数
   useEffect(() => {
+    if (isBlueprintMode) {
+      // 拼豆图纸的网格是解析出来的成品，不能按「切割数量/阈值」重新像素化覆盖掉
+      return;
+    }
     if (suppressAutoPixelationRef.current) {
       // 刚从云端载入作品：网格已经解码就位，跳过这一次自动重新像素化，
       // 否则会把服务端的成品网格（含手动编辑）按当前参数覆盖掉。
@@ -1234,7 +1402,7 @@ export default function Home() {
         // setTotalBeadCount(0);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [originalImageSrc, granularity, similarityThreshold, customPaletteSelections, pixelationMode, remapTrigger, verticalGranularity]);
+  }, [originalImageSrc, granularity, similarityThreshold, customPaletteSelections, pixelationMode, remapTrigger, verticalGranularity, isBlueprintMode]);
 
   // ++ 云端作品保存：把一份云端作品灌进编辑器 ++
   // 网格直接来自服务端（索引压缩解码），参数按保存时的设置还原；
@@ -1300,9 +1468,13 @@ export default function Home() {
       });
     }
 
-    // 原图：优先取云端存的原图，没有（例如 CSV 导入的作品）就按网格合成一张
+    // 原图：拼豆图纸作品的原图存在 blueprint_url（与 original_url 是两种不同的图片类型），
+    // 优先取图纸原图，其次云端原图，都没有（例如 CSV 导入的作品）就按网格合成一张
     let imageSrc: string | null = null;
-    if (project.original_url) {
+    if (project.blueprint_url) {
+      imageSrc = await fetchAsDataUrl(project.blueprint_url);
+    }
+    if (!imageSrc && project.original_url) {
       imageSrc = await fetchAsDataUrl(project.original_url);
     }
     if (!imageSrc) {
@@ -1334,6 +1506,11 @@ export default function Home() {
     setCurrentProject(project);
     setLoadedProjectImageUnchanged(true);
     setOriginalImageSrc(imageSrc);
+
+    // 云端作品带的是拼豆图纸：回到图纸模式（隐藏参数面板、固定 MARD）
+    const isBlueprintProject = project.source === 'blueprint';
+    setIsBlueprintMode(isBlueprintProject);
+    setBlueprintImageSrc(isBlueprintProject && imageSrc ? imageSrc : null);
 
     // 打开云端作品后，从拖放框位置开始浏览（预览区就在它下方）
     scrollToDropZone();
@@ -2465,22 +2642,40 @@ export default function Home() {
 
       {/* Apply dark mode styles to the main section */}
       <main ref={mainRef} className="w-full md:max-w-4xl flex flex-col items-center space-y-5 sm:space-y-6 relative overflow-hidden">
-        {/* Apply dark mode styles to the Drop Zone */}
-        <div
-          ref={dropZoneRef}
-          onDrop={handleDrop} onDragOver={handleDragOver} onDragEnter={handleDragOver}
-          onClick={isMounted ? triggerFileInput : undefined}
-          className={`scroll-mt-3 border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg p-6 sm:p-8 text-center ${isMounted ? 'cursor-pointer hover:border-blue-400 dark:hover:border-blue-500 hover:bg-blue-50 dark:hover:bg-gray-800' : 'cursor-wait'} transition-all duration-300 w-full md:max-w-md flex flex-col justify-center items-center shadow-sm hover:shadow-md`}
-          style={{ minHeight: '130px' }}
-        >
-          {/* Icon color */}
-          <svg xmlns="http://www.w3.org/2000/svg" className="h-10 w-10 sm:h-12 sm:w-12 text-gray-400 dark:text-gray-500 mb-2 sm:mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1}>
-             <path strokeLinecap="round" strokeLinejoin="round" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-          </svg>
-          {/* Text color */}
-          <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400">拖放图片到此处，或<span className="font-medium text-blue-600 dark:text-blue-400">点击选择文件</span></p>
-          {/* Text color */}
-                          <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">支持 JPG, PNG 图片格式，或 CSV 数据文件</p>
+        {/* 拖放区：左「导入原始图片」/ 右「导入拼豆图纸」，是两条相似但不同的流程 */}
+        <div className="w-full flex flex-col md:flex-row items-stretch justify-center gap-4">
+          {/* Apply dark mode styles to the Drop Zone */}
+          <div
+            ref={dropZoneRef}
+            onDrop={handleDrop} onDragOver={handleDragOver} onDragEnter={handleDragOver}
+            onClick={isMounted ? triggerFileInput : undefined}
+            className={`scroll-mt-3 border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg p-6 sm:p-8 text-center ${isMounted ? 'cursor-pointer hover:border-blue-400 dark:hover:border-blue-500 hover:bg-blue-50 dark:hover:bg-gray-800' : 'cursor-wait'} transition-all duration-300 w-full md:max-w-md flex flex-col justify-center items-center shadow-sm hover:shadow-md`}
+            style={{ minHeight: '130px' }}
+          >
+            {/* Icon color */}
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-10 w-10 sm:h-12 sm:w-12 text-gray-400 dark:text-gray-500 mb-2 sm:mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1}>
+               <path strokeLinecap="round" strokeLinejoin="round" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+            </svg>
+            {/* Text color */}
+            <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400">拖放原始图片到此处，或<span className="font-medium text-blue-600 dark:text-blue-400">点击选择文件</span></p>
+            {/* Text color */}
+                            <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">支持 JPG, PNG 图片格式，或 CSV 数据文件</p>
+          </div>
+
+          {/* 右侧：导入拼豆图纸（框选图片区域/色号清单区域后由算法解析） */}
+          <div
+            onDrop={handleBlueprintDrop} onDragOver={handleDragOver} onDragEnter={handleDragOver}
+            onClick={isMounted ? triggerBlueprintInput : undefined}
+            className={`scroll-mt-3 border-2 border-dashed rounded-lg p-6 sm:p-8 text-center ${isMounted ? 'cursor-pointer hover:border-emerald-400 dark:hover:border-emerald-500 hover:bg-emerald-50 dark:hover:bg-gray-800' : 'cursor-wait'} transition-all duration-300 w-full md:max-w-md flex flex-col justify-center items-center shadow-sm hover:shadow-md ${isBlueprintMode ? 'border-emerald-400 dark:border-emerald-500 bg-emerald-50/60 dark:bg-gray-800' : 'border-gray-300 dark:border-gray-600'}`}
+            style={{ minHeight: '130px' }}
+          >
+            {/* 网格图标 */}
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-10 w-10 sm:h-12 sm:w-12 text-gray-400 dark:text-gray-500 mb-2 sm:mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M4 4h16v16H4V4zm0 5.333h16M4 14.667h16M9.333 4v16M14.667 4v16" />
+            </svg>
+            <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400">拖放拼豆图纸到此处，或<span className="font-medium text-emerald-600 dark:text-emerald-400">点击选择文件</span></p>
+            <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">支持 JPG, PNG 图纸图片（含网格图与色号清单）</p>
+          </div>
         </div>
 
         {/* Apply dark mode styles to the Tip Box */}
@@ -2498,12 +2693,29 @@ export default function Home() {
         )}
 
                       <input type="file" accept="image/jpeg, image/png, .csv, text/csv, application/csv, text/plain" onChange={handleFileChange} ref={fileInputRef} className="hidden" />
+                      <input type="file" accept="image/jpeg, image/jpg, image/png, .jpg, .jpeg, .png" onChange={handleBlueprintFileChange} ref={blueprintInputRef} className="hidden" />
 
         {/* Controls and Output Area */}
         {originalImageSrc && (
           <div className="w-full flex flex-col items-center space-y-5 sm:space-y-6">
+            {/* 拼豆图纸模式：不显示「横轴/纵轴切割数量」等参数设置，只提示当前状态 */}
+            {isBlueprintMode && !isManualColoringMode && (
+              <div className="w-full md:max-w-2xl flex flex-wrap items-center justify-between gap-2 bg-emerald-50 dark:bg-gray-800 p-3 sm:p-4 rounded-xl shadow-sm border border-emerald-100 dark:border-gray-700">
+                <p className="text-xs sm:text-sm text-emerald-800 dark:text-emerald-300">
+                  <span className="font-medium">拼豆图纸模式</span>
+                  ：已按图纸解析出像素网格与色号清单，色号系统固定为 MARD 221 色。
+                </p>
+                <button
+                  type="button"
+                  onClick={handleExitBlueprintMode}
+                  className="text-xs sm:text-sm px-3 py-1.5 rounded-md border border-emerald-300 dark:border-emerald-600 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-gray-700 transition-colors"
+                >
+                  退出图纸模式
+                </button>
+              </div>
+            )}
             {/* ++ HIDE Control Row in manual mode ++ */}
-            {!isManualColoringMode && (
+            {!isManualColoringMode && !isBlueprintMode && (
               /* 修改控制面板网格布局 */
               <div className="w-full md:max-w-2xl grid grid-cols-1 sm:grid-cols-3 gap-4 bg-white dark:bg-gray-800 p-4 sm:p-5 rounded-xl shadow-md border border-gray-100 dark:border-gray-700">
                 {/* Granularity Input */}
@@ -3232,6 +3444,14 @@ export default function Home() {
         onConfirm={handleCropConfirm}
       />
 
+      {/* ++ 导入拼豆图纸：选择图片区域和色号清单区域 ++ */}
+      <BlueprintRegionModal
+        imageSrc={blueprintImageSrc || ''}
+        isOpen={isBlueprintRegionModalOpen}
+        onClose={() => setIsBlueprintRegionModalOpen(false)}
+        onConfirm={handleBlueprintRegionConfirm}
+      />
+
       {/* AI优化弹窗 */}
       <AIOptimizeModal
         imageSrc={originalImageSrc || ''}
@@ -3249,8 +3469,10 @@ export default function Home() {
         initialDescription={currentProject?.description}
         initialTags={currentProject?.tags}
         initialStatus={currentProject?.status}
-        initialSource={currentProject?.source}
-        originalImageSrc={originalImageSrc}
+        initialSource={isBlueprintMode ? 'blueprint' : currentProject?.source}
+        source={isBlueprintMode ? 'blueprint' : (currentProject?.source ?? 'photo')}
+        originalImageSrc={isBlueprintMode ? null : originalImageSrc}
+        blueprintImageSrc={isBlueprintMode ? blueprintImageSrc : null}
         mappedPixelData={mappedPixelData}
         colorCounts={colorCounts}
         totalBeadCount={totalBeadCount}
@@ -3266,6 +3488,7 @@ export default function Home() {
           is_custom_palette: isCustomPalette,
         }}
         originalImageUnchanged={!!currentProject && loadedProjectImageUnchanged}
+        blueprintImageUnchanged={!!currentProject && loadedProjectImageUnchanged}
         onSaved={(project) => {
           setCurrentProject(project);
           setLoadedProjectImageUnchanged(true);

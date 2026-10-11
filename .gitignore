@@ -67,3 +67,6 @@ test-base64.txt
 test-volc.js
 test-volc.mjs
 test-volc.ts
+
+# tmp
+tmp/
