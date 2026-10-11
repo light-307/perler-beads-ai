@@ -2788,7 +2788,7 @@ export default function Home() {
           <div className="w-full md:max-w-2xl mt-6 bg-white dark:bg-gray-800 p-4 rounded-lg shadow border border-gray-100 dark:border-gray-700 color-stats-panel">
             {/* Title color */}
             <h3 className="text-lg font-semibold mb-1 text-gray-700 dark:text-gray-200 text-center">
-              去除杂色 
+              色号清单
             </h3>
             {/* Subtitle color */}
             <p className="text-xs text-center text-gray-500 dark:text-gray-400 mb-3">点击下方列表中的颜色可将其从可用列表中排除。总计: {totalBeadCount} 颗</p>
