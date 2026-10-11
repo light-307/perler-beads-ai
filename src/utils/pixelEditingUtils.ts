@@ -3,6 +3,9 @@ import { MappedPixel } from './pixelation';
 // 透明键定义
 export const TRANSPARENT_KEY = 'ERASE';
 
+// 排除色号键定义：被排除颜色的格子标记为此键（视觉上为空，但保留原 hex 以便精确恢复）
+export const EXCLUDED_KEY = 'EXCLUDED';
+
 // 透明色数据
 export const transparentColorData: MappedPixel = { 
   key: TRANSPARENT_KEY, 

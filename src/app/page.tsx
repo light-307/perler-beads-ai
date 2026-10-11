@@ -12,8 +12,7 @@ import {
   PaletteColor,
   MappedPixel,
   hexToRgb,
-  colorDistance,
-  findClosestPaletteColor
+  colorDistance
 } from '../utils/pixelation';
 
 // 导入新的类型和组件
@@ -105,7 +104,7 @@ import FloatingToolbar from '../components/FloatingToolbar';
 import MagnifierTool from '../components/MagnifierTool';
 import MagnifierSelectionOverlay from '../components/MagnifierSelectionOverlay';
 import { loadPaletteSelections, savePaletteSelections, presetToSelections, PaletteSelections } from '../utils/localStorageUtils';
-import { TRANSPARENT_KEY, transparentColorData, recalculateColorStats } from '../utils/pixelEditingUtils';
+import { TRANSPARENT_KEY, EXCLUDED_KEY, transparentColorData, recalculateColorStats } from '../utils/pixelEditingUtils';
 import { computePreviewCanvasSize } from '../utils/canvasUtils';
 
 // 1. 导入新的 DonationModal 组件
@@ -147,9 +146,8 @@ export default function Home() {
   });
   // 状态变量：存储被排除的颜色（hex值）
   const [excludedColorKeys, setExcludedColorKeys] = useState<Set<string>>(new Set());
-  const [showExcludedColors, setShowExcludedColors] = useState<boolean>(false);
-  // 用于记录初始网格颜色（hex值），用于显示排除功能
-  const [initialGridColorKeys, setInitialGridColorKeys] = useState<Set<string>>(new Set());
+  // 已排除的颜色区块默认展开，方便用户随时恢复
+  const [showExcludedColors, setShowExcludedColors] = useState<boolean>(true);
   const [mappedPixelData, setMappedPixelData] = useState<MappedPixel[][] | null>(null);
   const [gridDimensions, setGridDimensions] = useState<{ N: number; M: number } | null>(null);
   const [colorCounts, setColorCounts] = useState<{ [key: string]: { count: number; color: string } } | null>(null);
@@ -161,6 +159,21 @@ export default function Home() {
   } | null>(null);
   const [tooltipData, setTooltipData] = useState<{ x: number, y: number, key: string, color: string } | null>(null);
   const [remapTrigger, setRemapTrigger] = useState<number>(0);
+
+  // 每个颜色当前处于"已排除"状态的格子数（用于已排除区块展示；排除后该色不再计入 colorCounts）
+  const excludedCellCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    if (!mappedPixelData) return counts;
+    for (const row of mappedPixelData) {
+      for (const cell of row) {
+        if (cell && cell.key === EXCLUDED_KEY) {
+          const hex = cell.color.toUpperCase();
+          counts[hex] = (counts[hex] ?? 0) + 1;
+        }
+      }
+    }
+    return counts;
+  }, [mappedPixelData]);
   const [isManualColoringMode, setIsManualColoringMode] = useState<boolean>(false);
   const [selectedColor, setSelectedColor] = useState<MappedPixel | null>(null);
   // 新增：一键擦除模式状态
@@ -675,7 +688,6 @@ export default function Home() {
     setGridDimensions(null);
     setColorCounts(null);
     setTotalBeadCount(0);
-    setInitialGridColorKeys(new Set());
     setBackgroundRemovalUndo(null);
     setIsManualColoringMode(false);
     setSelectedColor(null);
@@ -709,7 +721,6 @@ export default function Home() {
         setGridDimensions(result.gridDimensions);
         setColorCounts(result.colorCounts);
         setTotalBeadCount(result.totalBeadCount);
-        setInitialGridColorKeys(new Set(Object.keys(result.colorCounts)));
 
         setOriginalImageSrc(blueprintImageSrc);
         setIsBlueprintMode(true);
@@ -817,7 +828,6 @@ export default function Home() {
           
           setColorCounts(colorCountsMap);
           setTotalBeadCount(totalCount);
-          setInitialGridColorKeys(new Set(Object.keys(colorCountsMap)));
           
           // 根据mappedPixelData生成合成的originalImageSrc
           const syntheticImageSrc = generateSyntheticImageFromPixelData(mappedPixelData, gridDimensions);
@@ -864,7 +874,6 @@ export default function Home() {
       reader.onerror = () => {
           console.error("文件读取失败");
           alert("无法读取文件。");
-          setInitialGridColorKeys(new Set()); // ++ 重置初始键 ++
       }
       reader.readAsDataURL(file);
     }
@@ -879,7 +888,6 @@ export default function Home() {
     setGridDimensions(null);
     setColorCounts(null);
     setTotalBeadCount(0);
-    setInitialGridColorKeys(new Set()); // ++ 重置初始键 ++
     // ++ 重置横轴格子数量为默认值 ++
     const defaultGranularity = 50;
     setGranularity(defaultGranularity);
@@ -947,7 +955,6 @@ export default function Home() {
     setGridDimensions(null);
     setColorCounts(null);
     setTotalBeadCount(0);
-    setInitialGridColorKeys(new Set());
     setRemapTrigger(prev => prev + 1);
 
     // 重置手动上色模式
@@ -1154,7 +1161,6 @@ export default function Home() {
       setMappedPixelData(null); 
       setGridDimensions(null); 
       setColorCounts(null); 
-      setInitialGridColorKeys(new Set());
     };
     
     img.onload = () => {
@@ -1345,7 +1351,6 @@ export default function Home() {
         });
         setColorCounts(counts);
         setTotalBeadCount(totalCount);
-        setInitialGridColorKeys(new Set(Object.keys(counts)));
         console.log("Color counts updated based on merged data (after merging):", counts);
         console.log("Total bead count (total beads):", totalCount);
         console.log("Stored initial grid color keys:", Object.keys(counts));
@@ -1423,7 +1428,8 @@ export default function Home() {
 
     // 还原可用色板相关设置（顺序无关，React 会合并到同一次渲染）
     if (Array.isArray(settings.excluded_colors)) {
-      setExcludedColorKeys(new Set(settings.excluded_colors));
+      // 统一为大写 hex，与排除/恢复逻辑中的比较方式保持一致
+      setExcludedColorKeys(new Set(settings.excluded_colors.map(h => String(h).toUpperCase())));
     }
     if (settings.palette_selections && Object.keys(settings.palette_selections).length > 0) {
       setCustomPaletteSelections(settings.palette_selections);
@@ -1490,7 +1496,6 @@ export default function Home() {
     setGridDimensions(dimensions);
     setColorCounts(counts);
     setTotalBeadCount(total);
-    setInitialGridColorKeys(new Set(Object.keys(counts)));
     setBackgroundRemovalUndo(null);
     setIsManualColoringMode(false);
     setSelectedColor(null);
@@ -1624,134 +1629,75 @@ export default function Home() {
     };
 
     // --- Handler to toggle color exclusion ---
+    // 排除不再把格子重映射成别的色号：而是把该颜色的格子标记为"已排除"（视觉上为空，
+    // 保留原 hex），恢复时把这些格子精确还原回排除前的状态。
     const handleToggleExcludeColor = (hexKey: string) => {
+        if (!mappedPixelData || !gridDimensions) return;
+
         const currentExcluded = excludedColorKeys;
         const isExcluding = !currentExcluded.has(hexKey);
+        const upperHex = hexKey.toUpperCase();
 
+        console.log(`---------\nAttempting to ${isExcluding ? 'EXCLUDE' : 'RE-INCLUDE'} color: ${hexKey}`);
+
+        let newMappedData: MappedPixel[][];
         if (isExcluding) {
-            console.log(`---------\nAttempting to EXCLUDE color: ${hexKey}`);
-
-            // --- 确保初始颜色键已记录 ---
-            if (initialGridColorKeys.size === 0) {
-                console.error("Cannot exclude color: Initial grid color keys not yet calculated.");
-                alert("无法排除颜色，初始颜色数据尚未准备好，请稍候。");
-                return;
-            }
-            console.log("Initial Grid Hex Keys:", Array.from(initialGridColorKeys));
-            console.log("Currently Excluded Hex Keys (before this op):", Array.from(currentExcluded));
-
-            const nextExcludedKeys = new Set(currentExcluded);
-            nextExcludedKeys.add(hexKey);
-
-            // --- 使用初始颜色键进行重映射目标逻辑 ---
-            // 1. 从初始网格颜色集合开始（hex值）
-            const potentialRemapHexKeys = new Set(initialGridColorKeys);
-            console.log("Step 1: Potential Hex Keys (from initial):", Array.from(potentialRemapHexKeys));
-
-            // 2. 移除当前要排除的hex键
-            potentialRemapHexKeys.delete(hexKey);
-            console.log(`Step 2: Potential Hex Keys (after removing ${hexKey}):`, Array.from(potentialRemapHexKeys));
-
-            // 3. 移除任何*其他*当前也被排除的hex键
-            currentExcluded.forEach(excludedHexKey => {
-                potentialRemapHexKeys.delete(excludedHexKey);
-            });
-            console.log("Step 3: Potential Hex Keys (after removing other current exclusions):", Array.from(potentialRemapHexKeys));
-
-            // 4. 基于剩余的hex值创建重映射调色板
-            const remapTargetPalette = fullBeadPalette.filter(color => potentialRemapHexKeys.has(color.hex.toUpperCase()));
-            const remapTargetHexKeys = remapTargetPalette.map(p => p.hex.toUpperCase());
-            console.log("Step 4: Remap Target Palette Hex Keys:", remapTargetHexKeys);
-
-            // 5. *** 关键检查 ***：如果在考虑所有排除项后，没有*初始*颜色可供映射，则阻止此次排除
-            if (remapTargetPalette.length === 0) {
-                console.warn(`Cannot exclude color '${hexKey}'. No other valid colors from the initial grid remain after considering all current exclusions.`);
-                alert(`无法排除颜色 ${hexKey}，因为图中最初存在的其他可用颜色也已被排除。请先恢复部分其他颜色。`);
-                console.log("---------");
-                return; // 停止排除过程
-            }
-            console.log(`Remapping target palette (based on initial grid colors minus all exclusions) contains ${remapTargetPalette.length} colors.`);
-
-            // 查找被排除颜色的RGB值用于重映射
-            const excludedColorData = fullBeadPalette.find(p => p.hex.toUpperCase() === hexKey);
-            // 检查排除颜色的数据是否存在
-             if (!excludedColorData || !mappedPixelData || !gridDimensions) {
-                 console.error("Cannot exclude color: Missing data for remapping.");
-                 alert("无法排除颜色，缺少必要数据。");
-                console.log("---------");
-                 return;
-             }
-
-            console.log(`Remapping cells currently using excluded color: ${hexKey}`);
-            // 仅在需要重映射时创建深拷贝
-            const newMappedData = mappedPixelData.map(row => row.map(cell => ({...cell})));
-            let remappedCount = 0;
-            const { N, M } = gridDimensions;
-            let firstReplacementHex: string | null = null;
-
-            for (let j = 0; j < M; j++) {
-                for (let i = 0; i < N; i++) {
-                const cell = newMappedData[j]?.[i];
-                    // 此条件正确地仅针对具有排除hex值的单元格
-                    if (cell && !cell.isExternal && cell.color.toUpperCase() === hexKey) {
-                        // *** 使用派生的 remapTargetPalette 查找最接近的颜色 ***
-                    const replacementColor = findClosestPaletteColor(excludedColorData.rgb, remapTargetPalette);
-                        if (!firstReplacementHex) firstReplacementHex = replacementColor.hex;
-                        newMappedData[j][i] = { 
-                            ...cell, 
-                            key: replacementColor.key, 
-                            color: replacementColor.hex 
-                        };
-                    remappedCount++;
-                }
-                }
-            }
-            console.log(`Remapped ${remappedCount} cells. First replacement hex found was: ${firstReplacementHex || 'N/A'}`);
-
-            // 同时更新状态
-            setExcludedColorKeys(nextExcludedKeys); // 应用此颜色的排除
-            setMappedPixelData(newMappedData); // 使用重映射的数据更新
-
-            // 基于*新*映射数据重新计算计数（以hex为键）
-            const newCounts: { [hexKey: string]: { count: number; color: string } } = {};
-            let newTotalCount = 0;
-            newMappedData.flat().forEach(cell => {
-                if (cell && cell.color && !cell.isExternal) {
-                    const cellHex = cell.color.toUpperCase();
-                    if (!newCounts[cellHex]) {
-                        newCounts[cellHex] = { count: 0, color: cellHex };
-                }
-                    newCounts[cellHex].count++;
-                    newTotalCount++;
-                }
-            });
-            setColorCounts(newCounts);
-            setTotalBeadCount(newTotalCount);
-            console.log("State updated after exclusion and local remap based on initial grid colors.");
-            console.log("---------");
-
-            // ++ 在更新状态后，重新绘制 Canvas ++
-            if (pixelatedCanvasRef.current && gridDimensions) {
-              setMappedPixelData(newMappedData);
-              // 不要调用 setGridDimensions，因为颜色排除不需要改变网格尺寸
-            } else {
-               console.error("Canvas ref or grid dimensions missing, skipping draw call in handleToggleExcludeColor.");
-            }
-
+            // 将该颜色所有非外部格子标记为已排除：视觉上为空，保留原 hex 以便恢复
+            newMappedData = mappedPixelData.map(row => row.map(cell =>
+                cell && !cell.isExternal && cell.color.toUpperCase() === upperHex
+                    ? { key: EXCLUDED_KEY, color: cell.color, isExternal: true }
+                    : cell
+            ));
         } else {
-            // --- Re-including ---
-            console.log(`---------\nAttempting to RE-INCLUDE color: ${hexKey}`);
-            console.log(`Re-including color: ${hexKey}. Triggering full remap.`);
-            const nextExcludedKeys = new Set(currentExcluded);
-            nextExcludedKeys.delete(hexKey);
-            setExcludedColorKeys(nextExcludedKeys);
-            // 此处无需重置 initialGridColorKeys，完全重映射会通过 pixelateImage 重新计算它
-            setRemapTrigger(prev => prev + 1); // *** KEPT setRemapTrigger here for re-inclusion ***
-            console.log("---------");
+            // 恢复：把该颜色的"已排除"格子还原为排除前状态（key 按当前色号系统重新派生）；
+            // 已被手动重绘的格子不再是 EXCLUDED_KEY，不会被覆盖
+            newMappedData = mappedPixelData.map(row => row.map(cell =>
+                cell && cell.key === EXCLUDED_KEY && cell.color.toUpperCase() === upperHex
+                    ? { key: getColorKeyByHex(cell.color, selectedColorSystem), color: cell.color }
+                    : cell
+            ));
         }
+
+        const nextExcludedKeys = new Set(currentExcluded);
+        if (isExcluding) {
+            nextExcludedKeys.add(upperHex);
+        } else {
+            nextExcludedKeys.delete(upperHex);
+        }
+
+        setMappedPixelData(newMappedData);
+        setExcludedColorKeys(nextExcludedKeys);
+
+        // 基于新映射数据重新计算计数（已排除的格子不再计入）
+        const { colorCounts: newCounts, totalCount: newTotalCount } = recalculateColorStats(newMappedData);
+        setColorCounts(newCounts);
+        setTotalBeadCount(newTotalCount);
+        console.log(`State updated after ${isExcluding ? 'exclusion' : 'restore'} of ${hexKey}.`);
+        console.log("---------");
+
         // ++ Exit manual mode if colors are excluded/included ++
         setIsManualColoringMode(false);
         setSelectedColor(null);
+    };
+
+    // 一键恢复所有已排除颜色：把网格中全部"已排除"格子还原为排除前状态
+    const handleRestoreAllExcludedColors = () => {
+        if (!mappedPixelData || excludedColorKeys.size === 0) return;
+
+        console.log(`---------\nRestoring all ${excludedColorKeys.size} excluded colors.`);
+        const newMappedData = mappedPixelData.map(row => row.map(cell =>
+            cell && cell.key === EXCLUDED_KEY
+                ? { key: getColorKeyByHex(cell.color, selectedColorSystem), color: cell.color }
+                : cell
+        ));
+
+        setMappedPixelData(newMappedData);
+        setExcludedColorKeys(new Set());
+
+        const { colorCounts: newCounts, totalCount: newTotalCount } = recalculateColorStats(newMappedData);
+        setColorCounts(newCounts);
+        setTotalBeadCount(newTotalCount);
+        console.log("Restored all excluded colors");
     };
 
   // 一键去背景：识别边缘主色并洪水填充去除
@@ -1839,7 +1785,6 @@ export default function Home() {
 
     setColorCounts(newColorCounts);
     setTotalBeadCount(newTotalCount);
-    setInitialGridColorKeys(new Set(Object.keys(newColorCounts)));
     // 只有真正去除了格子才留下可撤销记录（覆盖上一次记录，仅保留最近一次）
     setBackgroundRemovalUndo({ grid: { N, M }, changedCells });
   };
@@ -1869,7 +1814,6 @@ export default function Home() {
     const { colorCounts: newColorCounts, totalCount: newTotalCount } = recalculateColorStats(newPixelData);
     setColorCounts(newColorCounts);
     setTotalBeadCount(newTotalCount);
-    setInitialGridColorKeys(new Set(Object.keys(newColorCounts)));
     setBackgroundRemovalUndo(null);
   };
 
@@ -3074,18 +3018,11 @@ export default function Home() {
                                       style={{ backgroundColor: colorData?.hex || hexKey }}
                                     ></span>
                                     <span className="font-mono text-xs text-gray-800 dark:text-gray-200">{getColorKeyByHex(hexKey, selectedColorSystem)}</span>
+                                    <span className="text-xs text-gray-500 dark:text-gray-400">{excludedCellCounts[hexKey.toUpperCase()] ?? 0} 颗</span>
                                   </div>
                                   <button
-                                    onClick={() => {
-                                      // 实现恢复单个颜色的逻辑
-                                      const newExcludedKeys = new Set(excludedColorKeys);
-                                      newExcludedKeys.delete(hexKey);
-                                      setExcludedColorKeys(newExcludedKeys);
-                                      setRemapTrigger(prev => prev + 1);
-                                      setIsManualColoringMode(false);
-                                      setSelectedColor(null);
-                                      console.log(`Restored color: ${hexKey}`);
-                                    }}
+                                    onClick={() => handleToggleExcludeColor(hexKey)}
+                                    title={`点击恢复 ${getColorKeyByHex(hexKey, selectedColorSystem)}`}
                                     className="text-xs py-0.5 px-2 bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300 rounded hover:bg-blue-200 dark:hover:bg-blue-800/40"
                                   >
                                     恢复
@@ -3102,14 +3039,7 @@ export default function Home() {
                       </div>
                       
                       <button
-                        onClick={() => {
-                          // 恢复所有颜色的逻辑
-                          setExcludedColorKeys(new Set());
-                          setRemapTrigger(prev => prev + 1);
-                          setIsManualColoringMode(false);
-                          setSelectedColor(null);
-                          console.log("Restored all excluded colors");
-                        }}
+                        onClick={handleRestoreAllExcludedColors}
                         className="mt-2 w-full text-xs py-1 px-2 bg-blue-500 hover:bg-blue-600 text-white rounded transition-colors"
                       >
                         一键恢复所有颜色
