@@ -268,7 +268,7 @@ export async function downloadImage({
     const gridHeight = M * downloadCellSize;
     
     // 计算小红书标识区域的高度
-    const xiaohongshuAreaHeight = 35; // 为小红书名字预留的底部空间
+    const xiaohongshuAreaHeight = 35; // 为名字预留的底部空间
   
     // 计算标题栏高度（根据图片大小自动调整）
     const baseTitleBarHeight = 80; // 增大基础高度
@@ -747,7 +747,7 @@ export async function downloadImage({
       
       // 统计区域水印 - 第三重保护，清晰明显
       const statsWatermarkFontSize = Math.max(10, Math.floor(statsFontSize * 0.7));
-      const statsWatermarkText = '图纸来源：小红书@LDB';
+      const statsWatermarkText = '图纸来源：TODO';
       
       ctx.font = `500 ${statsWatermarkFontSize}px system-ui, -apple-system, sans-serif`;
       const statsTextMetrics = ctx.measureText(statsWatermarkText);

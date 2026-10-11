@@ -287,7 +287,7 @@ const FloatingColorPalette: React.FC<FloatingColorPaletteProps> = ({
             </button>
           </div>
 
-          {/* 颜色网格 */}
+          {/* 颜色网格（色块下方常驻显示色号） */}
           <div className="grid grid-cols-6 gap-1.5">
             {displayColors.map((colorData) => {
               const isSelected = selectedColor?.key === colorData.key && selectedColor?.color === colorData.color;
@@ -297,25 +297,30 @@ const FloatingColorPalette: React.FC<FloatingColorPaletteProps> = ({
                 <button
                   key={`${colorData.key}-${colorData.color}`}
                   onClick={() => handleColorClick(colorData)}
-                  className={`group relative aspect-square rounded-lg border-2 transition-all duration-200 hover:scale-110 ${
+                  className={`flex flex-col items-center rounded-lg border-2 transition-all duration-200 hover:scale-110 ${
                     isSelected
                       ? 'border-blue-500 dark:border-blue-400 ring-2 ring-blue-200 dark:ring-blue-800 scale-110'
                       : 'border-gray-300 dark:border-gray-600 hover:border-gray-400 dark:hover:border-gray-500'
                   }`}
-                  style={{ backgroundColor: colorData.color }}
                   title={`${displayKey} (${colorData.color})`}
                 >
-                  {/* 选中指示器 */}
-                  {isSelected && (
-                    <div className="absolute inset-0 flex items-center justify-center">
-                      <div className="w-2 h-2 bg-white rounded-full shadow-lg"></div>
-                    </div>
-                  )}
-                  
-                  {/* 悬停时显示色号 */}
-                  <div className="absolute -top-8 left-1/2 transform -translate-x-1/2 bg-gray-800 dark:bg-gray-700 text-white text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-10">
+                  {/* 色块 */}
+                  <span
+                    className="relative w-full aspect-square rounded-md"
+                    style={{ backgroundColor: colorData.color }}
+                  >
+                    {/* 选中指示器 */}
+                    {isSelected && (
+                      <div className="absolute inset-0 flex items-center justify-center">
+                        <div className="w-2 h-2 bg-white rounded-full shadow-lg"></div>
+                      </div>
+                    )}
+                  </span>
+
+                  {/* 色块下方的色号 */}
+                  <span className="w-full truncate text-center font-mono text-[10px] leading-tight py-0.5 text-gray-700 dark:text-gray-200">
                     {displayKey}
-                  </div>
+                  </span>
                 </button>
               );
             })}

@@ -1,5 +1,6 @@
 import React, { useRef, useEffect, useCallback, useState } from 'react';
 import { MappedPixel } from '../utils/pixelation';
+import { EXCLUDED_KEY } from '../utils/pixelEditingUtils';
 
 interface FocusCanvasProps {
   mappedPixelData: MappedPixel[][];
@@ -74,8 +75,11 @@ const FocusCanvas: React.FC<FocusCanvasProps> = ({
         // 确定格子颜色
         let fillColor = pixel.color;
 
-        // 如果不是当前颜色，显示为灰度
-        if (pixel.color !== currentColor) {
+        // 已排除的格子在专注模式下同样显示为空（白色），与主预览和导出行为一致
+        const isExcludedCell = pixel.key === EXCLUDED_KEY;
+        if (isExcludedCell) {
+          fillColor = '#FFFFFF';
+        } else if (pixel.color !== currentColor) {
           // 转换为灰度
           const hex = pixel.color.replace('#', '');
           const r = parseInt(hex.substr(0, 2), 16);
