@@ -2,6 +2,7 @@
 
 import React, { useRef, useEffect, TouchEvent, MouseEvent, useState } from 'react';
 import { MappedPixel } from '../utils/pixelation';
+import { computePreviewCanvasSize } from '../utils/canvasUtils';
 
 interface PixelatedPreviewCanvasProps {
   mappedPixelData: MappedPixel[][] | null;
@@ -111,6 +112,8 @@ const PixelatedPreviewCanvas: React.FC<PixelatedPreviewCanvasProps> = ({
   const [isHighlighting, setIsHighlighting] = useState(false);
   // 画布显示尺寸（用于对齐坐标轴标签）
   const [displaySize, setDisplaySize] = useState<{ width: number; height: number } | null>(null);
+  // 已经按网格尺寸校正过内部尺寸的画布，避免重复重置导致画面闪烁
+  const sizedCanvasRef = useRef<{ el: HTMLCanvasElement; N: number; M: number } | null>(null);
 
   // Effect to detect dark mode changes and update state
   useEffect(() => {
@@ -168,10 +171,24 @@ const PixelatedPreviewCanvas: React.FC<PixelatedPreviewCanvasProps> = ({
 
   // Update useEffect for drawing to depend on darkModeState as well
   useEffect(() => {
+    const canvas = canvasRef.current;
     // Ensure darkModeState is not null before drawing
-    if (mappedPixelData && gridDimensions && canvasRef.current && darkModeState !== null) {
+    if (mappedPixelData && gridDimensions && canvas && darkModeState !== null) {
+      // 预览画布的 width/height 属性决定显示比例：没有设置时会退回浏览器默认的
+      // 300×150，看起来又小又扁。pixelateImage 会设置它，但从「我的作品」载入
+      // 云端作品时跳过了重新像素化，所以在这里按网格尺寸兜底校正一次。
+      const sized = sizedCanvasRef.current;
+      if (!sized || sized.el !== canvas || sized.N !== gridDimensions.N || sized.M !== gridDimensions.M) {
+        const { width, height } = computePreviewCanvasSize(gridDimensions.N, gridDimensions.M);
+        if (canvas.width !== width || canvas.height !== height) {
+          canvas.width = width;
+          canvas.height = height;
+        }
+        sizedCanvasRef.current = { el: canvas, N: gridDimensions.N, M: gridDimensions.M };
+      }
+
       console.log(`Redrawing canvas, dark mode: ${darkModeState}`); // Log redraw trigger
-      drawPixelatedCanvas(mappedPixelData, canvasRef.current, gridDimensions, highlightColorKey, isHighlighting);
+      drawPixelatedCanvas(mappedPixelData, canvas, gridDimensions, highlightColorKey, isHighlighting);
     }
   }, [mappedPixelData, gridDimensions, canvasRef, darkModeState, highlightColorKey, isHighlighting]); // Add darkModeState dependency
 

@@ -106,6 +106,7 @@ import MagnifierTool from '../components/MagnifierTool';
 import MagnifierSelectionOverlay from '../components/MagnifierSelectionOverlay';
 import { loadPaletteSelections, savePaletteSelections, presetToSelections, PaletteSelections } from '../utils/localStorageUtils';
 import { TRANSPARENT_KEY, transparentColorData, recalculateColorStats } from '../utils/pixelEditingUtils';
+import { computePreviewCanvasSize } from '../utils/canvasUtils';
 
 // 1. 导入新的 DonationModal 组件
 import DonationModal from '../components/DonationModal';
@@ -1006,33 +1007,13 @@ export default function Home() {
       if (N <= 0 || M <= 0) { console.error("Invalid grid dimensions:", { N, M }); return; }
       console.log(`Grid size: ${N}x${M}`);
 
-      // 动态调整画布尺寸：当格子数量大于100时，增加画布尺寸以保持每个格子的可见性
-      const baseWidth = 500;
-      const minCellSize = 4; // 每个格子的最小尺寸（像素）
-      const recommendedCellSize = 6; // 推荐的格子尺寸（像素）
-      
-      let outputWidth = baseWidth;
-      
-      // 如果格子数量大于100，计算需要的画布宽度
-      if (N > 100) {
-        const requiredWidthForMinSize = N * minCellSize;
-        const requiredWidthForRecommendedSize = N * recommendedCellSize;
-        
-        // 使用推荐尺寸，但不超过屏幕宽度的90%（最大1200px）
-        const maxWidth = Math.min(1200, window.innerWidth * 0.9);
-        outputWidth = Math.min(maxWidth, Math.max(baseWidth, requiredWidthForRecommendedSize));
-        
-        // 确保不小于最小要求
-        outputWidth = Math.max(outputWidth, requiredWidthForMinSize);
-        
-        console.log(`Large grid detected (${N} columns). Adjusted canvas width from ${baseWidth} to ${outputWidth}px (cell size: ${Math.round(outputWidth / N)}px)`);
-      }
-      
-      // 按实际网格宽高比（M/N）计算画布高度，保证格子为正方形（M 被显式修改时与图片比例解耦）
-      const outputHeight = Math.round(outputWidth * (M / N));
-      
+      // 动态调整画布尺寸：格子多时自动放大以保持每个格子的可见性，
+      // 高度按网格比例推导，保证格子是正方形（见 computePreviewCanvasSize）
+      const { width: outputWidth, height: outputHeight } = computePreviewCanvasSize(N, M);
+
       // 在控制台提示用户画布尺寸变化
       if (N > 100) {
+        console.log(`Large grid detected (${N} columns). Canvas size: ${outputWidth}x${outputHeight}px (cell size: ${Math.round(outputWidth / N)}px)`);
         console.log(`💡 由于格子数量较多 (${N}x${M})，画布已自动放大以保持清晰度。可以使用水平滚动查看完整图像。`);
       }
       originalCanvas.width = img.width; originalCanvas.height = img.height;
