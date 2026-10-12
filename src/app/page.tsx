@@ -2426,6 +2426,12 @@ export default function Home() {
         >
           我的作品
         </a>
+        <a
+          href="/beads"
+          className="px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 hover:bg-white dark:hover:bg-gray-700 transition-colors"
+        >
+          我的豆仓
+        </a>
         {authLoading ? (
           <span className="px-3 py-1.5 text-gray-400">加载中...</span>
         ) : user ? (
