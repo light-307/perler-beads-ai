@@ -76,7 +76,6 @@ export default function SaveProjectModal({
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [tagsInput, setTagsInput] = useState('');
-  const [status, setStatus] = useState<ProjectStatus>('unfinished');
   const [stage, setStage] = useState<Stage>('idle');
   const [error, setError] = useState<string | null>(null);
 
@@ -86,10 +85,9 @@ export default function SaveProjectModal({
     setTitle(initialTitle || '');
     setDescription(initialDescription || '');
     setTagsInput((initialTags ?? []).join(', '));
-    setStatus(initialStatus ?? 'unfinished');
     setStage('idle');
     setError(null);
-  }, [isOpen, initialTitle, initialDescription, initialTags, initialStatus]);
+  }, [isOpen, initialTitle, initialDescription, initialTags]);
 
   const gridCellCount = useMemo(() => {
     if (!mappedPixelData || mappedPixelData.length === 0) return 0;
@@ -148,7 +146,9 @@ export default function SaveProjectModal({
         color_system: settings.color_system,
         settings,
         stats: { color_counts: colorCounts ?? {}, total_beads: totalBeadCount },
-        status,
+        // 制作状态已改由豆仓的「完成 x 次」表达（见 /works 页），
+        // 这里原样带回既有值，仅保留字段兼容，不再让用户选择。
+        status: initialStatus ?? 'unfinished',
         grid: gridData,
         images,
       };
@@ -227,26 +227,6 @@ export default function SaveProjectModal({
               className="w-full px-3 py-2 text-sm rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
               placeholder="挂件, 卡通"
             />
-          </div>
-
-          <div>
-            <span className="block text-sm font-medium mb-1">制作状态</span>
-            <div className="flex gap-2">
-              {(['unfinished', 'finished'] as ProjectStatus[]).map((value) => (
-                <button
-                  key={value}
-                  type="button"
-                  onClick={() => setStatus(value)}
-                  className={`flex-1 py-2 text-xs sm:text-sm rounded-lg border transition-colors ${
-                    status === value
-                      ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300'
-                      : 'border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700'
-                  }`}
-                >
-                  {value === 'finished' ? '已完成' : '未完成'}
-                </button>
-              ))}
-            </div>
           </div>
 
           <div className="text-[11px] text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-gray-900/50 rounded-lg px-3 py-2 space-y-0.5">

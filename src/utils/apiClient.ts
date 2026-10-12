@@ -5,6 +5,14 @@
 // NEXT_PUBLIC_* 基础地址配置，也不需要在代码里写死任何域名。
 
 import type { AuthUser, ProjectDetail, ProjectSummary, ProjectWritePayload, QuotaStatus } from '../types/project';
+import type {
+  BeadCancelResponse,
+  BeadCompletePayload,
+  BeadCompleteResponse,
+  BeadInitPayload,
+  BeadInventory,
+  BeadManualRecordPayload,
+} from '../types/bead';
 
 /** 接口返回的错误，带上 HTTP 状态码与服务端错误码便于页面区分文案。 */
 export class ApiRequestError extends Error {
@@ -130,6 +138,54 @@ export async function updateProject(id: string, payload: ProjectWritePayload): P
 
 export async function deleteProject(id: string): Promise<void> {
   await request<{ ok: boolean }>(`/api/projects/${encodeURIComponent(id)}`, { method: 'DELETE' });
+}
+
+// ------------------------------------------------------------------ 豆仓
+
+/** 读取豆仓；从没初始化过时返回 null（页面据此弹出初始化弹窗）。 */
+export async function getBeadInventory(): Promise<BeadInventory | null> {
+  const data = await request<{ inventory: BeadInventory | null }>('/api/beads');
+  return data.inventory ?? null;
+}
+
+export async function initializeBeadInventory(payload: BeadInitPayload): Promise<BeadInventory> {
+  const data = await request<{ inventory: BeadInventory }>('/api/beads', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+  return data.inventory;
+}
+
+export async function addBeadManualRecord(payload: BeadManualRecordPayload): Promise<BeadInventory> {
+  const data = await request<{ inventory: BeadInventory }>('/api/beads/records', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+  return data.inventory;
+}
+
+export async function deleteBeadRecord(recordId: string): Promise<BeadInventory> {
+  const data = await request<{ inventory: BeadInventory }>(
+    `/api/beads/records/${encodeURIComponent(recordId)}`,
+    { method: 'DELETE' }
+  );
+  return data.inventory;
+}
+
+/** 完成 1 次：按作品当前用量扣减库存，并写入一组完成记录。 */
+export async function completeBeadWork(payload: BeadCompletePayload): Promise<BeadCompleteResponse> {
+  return request<BeadCompleteResponse>('/api/beads/complete', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+/** 取消 1 次：撤销该作品最近一次完成的整组记录。 */
+export async function cancelBeadWork(projectId: string): Promise<BeadCancelResponse> {
+  return request<BeadCancelResponse>('/api/beads/cancel', {
+    method: 'POST',
+    body: JSON.stringify({ project_id: projectId }),
+  });
 }
 
 // ------------------------------------------------------------------ 用量
