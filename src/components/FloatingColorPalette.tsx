@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { MappedPixel } from '../utils/pixelation';
 import { TRANSPARENT_KEY } from '../utils/pixelEditingUtils';
 import { ColorReplaceState } from '../hooks/useManualEditingState';
@@ -24,6 +24,8 @@ interface FloatingColorPaletteProps {
   onToggleOpen: () => void;
   isActive: boolean;
   onActivate: () => void;
+  /** 豆仓库存表（色号 → 库存粒数）；不传或为 null 时不显示库存 */
+  stockByCode?: Record<string, number> | null;
 }
 
 const FloatingColorPalette: React.FC<FloatingColorPaletteProps> = ({
@@ -43,7 +45,8 @@ const FloatingColorPalette: React.FC<FloatingColorPaletteProps> = ({
   isOpen,
   onToggleOpen,
   isActive,
-  onActivate
+  onActivate,
+  stockByCode = null
 }) => {
   // 计算初始位置，确保左边缘在屏幕内（小屏幕时右边缘可以超出）
   const getInitialPosition = () => ({
@@ -159,7 +162,52 @@ const FloatingColorPalette: React.FC<FloatingColorPaletteProps> = ({
     }
   };
 
-  const displayColors = showFullPalette ? fullPaletteColors : colors;
+  // ++ 字母筛选：按色号字母前缀（A / B / C …）过滤当前展示的色板 ++
+  const [letterFilter, setLetterFilter] = useState<string>('all');
+
+  const displayColors = useMemo(
+    () => (showFullPalette ? fullPaletteColors : colors),
+    [showFullPalette, fullPaletteColors, colors]
+  );
+
+  /** 取色号的字母前缀；无法识别时归入 '#' 组 */
+  const letterOf = useCallback((code: string): string => {
+    const match = /^[A-Za-z]+/.exec(code ?? '');
+    return match ? match[0].toUpperCase() : '#';
+  }, []);
+
+  /** 当前展示色板里实际出现过的字母前缀 */
+  const letterOptions = useMemo(() => {
+    const letters = new Set<string>();
+    displayColors.forEach(colorData => {
+      letters.add(letterOf(getColorKeyByHex(colorData.color, selectedColorSystem)));
+    });
+    return Array.from(letters).sort((a, b) => {
+      if (a === '#') return 1;
+      if (b === '#') return -1;
+      return a.localeCompare(b, 'en');
+    });
+  }, [displayColors, letterOf, selectedColorSystem]);
+
+  /** 切换色板后，若当前筛选的字母已不存在则回到「全部」 */
+  useEffect(() => {
+    if (letterFilter !== 'all' && !letterOptions.includes(letterFilter)) {
+      setLetterFilter('all');
+    }
+  }, [letterFilter, letterOptions]);
+
+  const visibleColors = useMemo(
+    () => (letterFilter === 'all'
+      ? displayColors
+      : displayColors.filter(colorData => letterOf(getColorKeyByHex(colorData.color, selectedColorSystem)) === letterFilter)),
+    [displayColors, letterFilter, letterOf, selectedColorSystem]
+  );
+
+  /** 取某色号的豆仓库存；无豆仓数据或色号无法识别时返回 null（不显示） */
+  const stockOfColor = useCallback((code: string): number | null => {
+    if (!stockByCode || !code || code === '?') return null;
+    return stockByCode[code] ?? 0;
+  }, [stockByCode]);
 
   // 如果调色盘关闭，完全不渲染
   if (!isOpen) {
@@ -175,7 +223,7 @@ const FloatingColorPalette: React.FC<FloatingColorPaletteProps> = ({
       style={{
         left: position.x,
         top: position.y,
-        width: '280px',
+        width: '320px',
         maxHeight: '400px'
       }}
       onClick={onActivate}
@@ -214,7 +262,7 @@ const FloatingColorPalette: React.FC<FloatingColorPaletteProps> = ({
       </div>
 
       {/* 内容区域 */}
-      <div className="p-3 max-h-80 overflow-y-auto">
+      <div className="p-2.5 max-h-80 overflow-y-auto">
           {/* 模式状态指示器 */}
           {colorReplaceState.isActive && (
             <div className="mb-3 p-2 bg-orange-100 dark:bg-orange-900/30 border border-orange-200 dark:border-orange-800 rounded-lg text-xs">
@@ -287,11 +335,41 @@ const FloatingColorPalette: React.FC<FloatingColorPaletteProps> = ({
             </button>
           </div>
 
-          {/* 颜色网格（色块下方常驻显示色号） */}
-          <div className="grid grid-cols-6 gap-1.5">
-            {displayColors.map((colorData) => {
+          {/* ++ 字母筛选：仅在当前色板出现多个字母前缀时显示 ++ */}
+          {letterOptions.length > 1 && (
+            <div className="flex items-center gap-1 mb-3 overflow-x-auto pb-1">
+              <button
+                onClick={() => setLetterFilter('all')}
+                className={`flex-shrink-0 px-2 py-0.5 rounded text-[10px] border transition-colors ${
+                  letterFilter === 'all'
+                    ? 'bg-blue-500 text-white border-blue-500'
+                    : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 border-gray-300 dark:border-gray-600 hover:bg-gray-200 dark:hover:bg-gray-600'
+                }`}
+              >
+                全部
+              </button>
+              {letterOptions.map(letter => (
+                <button
+                  key={letter}
+                  onClick={() => setLetterFilter(letter)}
+                  className={`flex-shrink-0 px-2 py-0.5 rounded text-[10px] font-mono border transition-colors ${
+                    letterFilter === letter
+                      ? 'bg-blue-500 text-white border-blue-500'
+                      : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 border-gray-300 dark:border-gray-600 hover:bg-gray-200 dark:hover:bg-gray-600'
+                  }`}
+                >
+                  {letter}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {/* 颜色网格（色块下方常驻显示色号与豆仓库存） */}
+          <div className="grid grid-cols-6 gap-1">
+            {visibleColors.map((colorData) => {
               const isSelected = selectedColor?.key === colorData.key && selectedColor?.color === colorData.color;
               const displayKey = getColorKeyByHex(colorData.color, selectedColorSystem);
+              const stock = stockOfColor(displayKey);
               
               return (
                 <button
@@ -302,7 +380,7 @@ const FloatingColorPalette: React.FC<FloatingColorPaletteProps> = ({
                       ? 'border-blue-500 dark:border-blue-400 ring-2 ring-blue-200 dark:ring-blue-800 scale-110'
                       : 'border-gray-300 dark:border-gray-600 hover:border-gray-400 dark:hover:border-gray-500'
                   }`}
-                  title={`${displayKey} (${colorData.color})`}
+                  title={`${displayKey} (${colorData.color})${stock !== null ? ` · 豆仓库存 ${stock} 粒` : ''}`}
                 >
                   {/* 色块 */}
                   <span
@@ -321,10 +399,30 @@ const FloatingColorPalette: React.FC<FloatingColorPaletteProps> = ({
                   <span className="w-full truncate text-center font-mono text-[10px] leading-tight py-0.5 text-gray-700 dark:text-gray-200">
                     {displayKey}
                   </span>
+
+                  {/* ++ 色块下方的豆仓库存（只显示数字，完整信息见 title） ++ */}
+                  {stock !== null && (
+                    <span
+                      className={`w-full truncate text-center text-[9px] leading-tight pb-0.5 tabular-nums ${
+                        stock > 0
+                          ? 'text-emerald-600 dark:text-emerald-400'
+                          : 'text-red-500 dark:text-red-400'
+                      }`}
+                    >
+                      {stock}
+                    </span>
+                  )}
                 </button>
               );
             })}
           </div>
+
+          {/* ++ 当前筛选字母下没有色号时的提示 ++ */}
+          {visibleColors.length === 0 && (
+            <p className="text-center text-xs text-gray-400 dark:text-gray-500 py-4">
+              该字母下没有可选色号
+            </p>
+          )}
 
           {/* 当前选中颜色信息 */}
           {selectedColor && selectedColor.key !== TRANSPARENT_KEY && (

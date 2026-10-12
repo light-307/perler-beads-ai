@@ -115,10 +115,12 @@ import BlueprintRegionModal from '../components/BlueprintRegionModal';
 import AIOptimizeModal from '../components/AIOptimizeModal';
 import SaveProjectModal from '../components/SaveProjectModal';
 import { useAuth } from '../components/AuthProvider';
-import { ApiRequestError, fetchAsDataUrl, getProject } from '../utils/apiClient';
+import { ApiRequestError, fetchAsDataUrl, getProject, getBeadInventory } from '../utils/apiClient';
 import { decodeGridFromBase64 } from '../utils/gridCodec';
 import { parseBlueprintImage, type PixelRect } from '../utils/blueprintParser';
 import type { ProjectDetail, ProjectSettings } from '../types/project';
+import type { BeadInventory } from '../types/bead';
+import { sumRecordDeltas } from '../utils/beadInventory';
 
 export default function Home() {
   // ++ 云端作品保存：当前登录用户 ++
@@ -203,6 +205,9 @@ export default function Home() {
 
   // 新增：完整色板切换状态
   const [showFullPalette, setShowFullPalette] = useState<boolean>(false);
+
+  // ++ 豆仓库存：登录后加载一次，供「色号清单」与手动编辑模式的调色盘显示库存 ++
+  const [beadInventory, setBeadInventory] = useState<BeadInventory | null>(null);
   
   // 新增：颜色替换相关状态
   const [colorReplaceState, setColorReplaceState] = useState<{
@@ -1548,6 +1553,30 @@ export default function Home() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authLoading, user]);
 
+  // ++ 豆仓库存：登录后拉取一次（未登录或未初始化则保持 null，界面不显示库存）++ 
+  useEffect(() => {
+    if (authLoading) return;
+    if (!user) {
+      setBeadInventory(null);
+      return;
+    }
+
+    let cancelled = false;
+    getBeadInventory()
+      .then(inventory => {
+        if (!cancelled) setBeadInventory(inventory);
+      })
+      .catch(error => {
+        // 豆仓不可用不应影响编辑器主流程，这里只记录日志
+        console.warn('读取豆仓库存失败:', error);
+        if (!cancelled) setBeadInventory(null);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [authLoading, user]);
+
   // 确保文件输入框引用在组件挂载后正确设置
   useEffect(() => {
     // 延迟执行，确保DOM完全渲染
@@ -2364,6 +2393,16 @@ export default function Home() {
     return sortColorsByHue(selectedColors);
   }, [customPaletteSelections, selectedColorSystem]);
 
+  // ++ 豆仓库存表：色号 → 当前库存粒数；未登录或未初始化豆仓时为 null（界面不显示库存）++ 
+  const beadStockByCode = useMemo<Record<string, number> | null>(() => {
+    if (!beadInventory) return null;
+    const result: Record<string, number> = {};
+    Object.entries(beadInventory.colors ?? {}).forEach(([code, entry]) => {
+      result[code] = sumRecordDeltas(entry?.records);
+    });
+    return result;
+  }, [beadInventory]);
+
   return (
     <>
     {/* 添加自定义动画样式 */}
@@ -2964,6 +3003,10 @@ export default function Home() {
                   const isExcluded = excludedColorKeys.has(hexKey);
                   const count = colorCounts[hexKey].count;
                   const colorHex = colorCounts[hexKey].color;
+                  // ++ 豆仓库存：未加载豆仓或色号无法识别时为 null（不显示）++
+                  const stock = beadStockByCode && displayColorKey !== '?'
+                    ? (beadStockByCode[displayColorKey] ?? 0)
+                    : null;
 
                   return (
                     <li
@@ -2987,7 +3030,24 @@ export default function Home() {
                         <span className={`font-mono font-medium ${isExcluded ? 'text-red-700 dark:text-red-400' : 'text-gray-800 dark:text-gray-200'}`}>{displayColorKey}</span>
                       </div>
                       {/* Adjust text color for count (normal and excluded) */}
-                      <span className={`text-xs ${isExcluded ? 'text-red-600 dark:text-red-400 line-through' : 'text-gray-600 dark:text-gray-300'}`}>{count} 颗</span>
+                      <div className="flex flex-col items-end leading-tight">
+                        <span className={`text-xs ${isExcluded ? 'text-red-600 dark:text-red-400 line-through' : 'text-gray-600 dark:text-gray-300'}`}>{count} 颗</span>
+                        {/* ++ 豆仓库存：不足时标红并提示缺口 ++ */}
+                        {stock !== null && (
+                          <span
+                            className={`text-[10px] ${
+                              isExcluded
+                                ? 'text-gray-400 dark:text-gray-500'
+                                : stock < count
+                                  ? 'text-red-500 dark:text-red-400 font-medium'
+                                  : 'text-emerald-600 dark:text-emerald-400'
+                            }`}
+                            title={stock < count ? `豆仓库存不足，缺 ${count - stock} 粒` : `豆仓库存 ${stock} 粒`}
+                          >
+                            库存 {stock}{stock < count ? `（缺 ${count - stock}）` : ''}
+                          </span>
+                        )}
+                      </div>
                     </li>
                   );
                 })}
@@ -3195,6 +3255,7 @@ export default function Home() {
           onToggleOpen={() => setIsFloatingPaletteOpen(!isFloatingPaletteOpen)}
           isActive={activeFloatingTool === 'palette'}
           onActivate={handleActivatePalette}
+          stockByCode={beadStockByCode}
         />
       )}
 
